@@ -1,0 +1,181 @@
+#include "board.h"
+#include "moveformat.h"
+#include "movegen.h"
+#include "operations.h"
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+const char piece_chars[12] = {
+    'P', 'N', 'B', 'R', 'Q', 'K', // White pieces
+    'p', 'n', 'b', 'r', 'q', 'k'  // Black pieces
+};
+
+int piece_index(char c) {
+    switch (c) {
+        case 'P': return WP; case 'N': return WN; case 'B': return WB;
+        case 'R': return WR; case 'Q': return WQ; case 'K': return WK;
+        case 'p': return BP; case 'n': return BN; case 'b': return BB;
+        case 'r': return BR; case 'q': return BQ; case 'k': return BK;
+        default:  return -1;
+    }
+}
+
+Bitboard squares_between_exclusive(int a, int b) {
+    Bitboard bb = 0;
+
+    // Return 0 if a and b are the same square
+    if (a == b) return 0;
+
+    int step = 0;
+
+    if (RANK(a) == RANK(b)) {
+        // Same rank: move left/right
+        step = (b > a) ? 1 : -1;
+    } else if (FILE(a) == FILE(b)) {
+        // Same file: move up/down
+        step = (b > a) ? 8 : -8;
+    } else if (abs(FILE(a) - FILE(b)) == abs(RANK(a) - RANK(b))) {
+        // Diagonal
+        step = (b > a) ? ((FILE(b) > FILE(a)) ? 9 : 7) : ((FILE(b) > FILE(a)) ? -7 : -9);
+    } else {
+        // Not aligned in a straight path
+        return 0;
+    }
+
+    for (int sq = a + step; sq != b; sq += step)
+        bb |= 1ULL << sq;
+
+    return bb;
+}
+
+void print_board(const Position* pos) {
+    printf("  +------------------------+\n");
+    for (int rank = 7; rank >= 0; rank--) {
+        printf("%d |", rank + 1);
+        for (int file = 0; file < 8; file++) {
+            int sq = rank * 8 + file;
+            char piece = '.';
+            for (int i = 0; i < 12; i++) {
+                if (pos->pieces[i] & (1ULL << sq)) {
+                    piece = piece_chars[i];
+                    break;
+                }
+            }
+            printf(" %c", piece);
+        }
+        printf(" |\n");
+    }
+    printf("  +------------------------+\n");
+    printf("    a b c d e f g h\n\n");
+    printf("Side to move: %s\n", pos->side_to_move == 0 ? "White" : "Black");
+}
+
+void init_position(Position* pos, const char* fen) {
+    // Clear position
+    memset(pos, 0, sizeof(Position));
+    pos->en_passant = -1;
+    
+    // Prepare FEN for parsing
+    char fen_copy[128];
+    strncpy(fen_copy, fen, sizeof(fen_copy));
+    char* token = strtok(fen_copy, " "); // Split by space
+
+    // Setting up the pieces
+    int square = 56;
+    for (char* c = token; *c; c++) {
+        if (*c >= '1' && *c <= '8') {
+            square += (*c - '0'); // Skip squares
+        } else if (*c == '/') {
+            square -= 16; // Move to the next rank
+        } else {
+            int index = piece_index(*c);
+            if (index >= 0) {
+                pos->pieces[index] |= 1ULL << square;
+                pos->occupied[index < 6 ? 0 : 1] |= 1ULL << square;
+                pos->occupied[ALL] |= 1ULL << square;
+
+                // Track king and rook locations for castling
+                if (*c == 'K') pos->king_from[WHITE] = square;
+                if (*c == 'k') pos->king_from[BLACK] = square;
+                if (*c == 'R') {
+                    if (square < pos->king_from[WHITE]) {
+                        pos->rook_from[WHITE_QUEENSIDE_ROOK] = square;
+                    } else {
+                        pos->rook_from[WHITE_KINGSIDE_ROOK] = square;
+                    }                               
+                }
+                if (*c == 'r') {
+                    if (square < pos->king_from[BLACK]) {
+                        pos->rook_from[BLACK_QUEENSIDE_ROOK] = square;
+                    } else {
+                        pos->rook_from[BLACK_KINGSIDE_ROOK] = square;
+                    }
+                }
+            }
+            square++;
+        }
+    }
+
+    // Parse side to move
+    token = strtok(NULL, " ");
+    pos->side_to_move = (token[0] == 'w') ? 0 : 1; // Default to white
+
+    // Parse castling rights
+    token = strtok(NULL, " ");
+    if (strchr(token, 'K')) pos->castling_rights |= WHITE_KINGSIDE;
+    if (strchr(token, 'Q')) pos->castling_rights |= WHITE_QUEENSIDE;
+    if (strchr(token, 'k')) pos->castling_rights |= BLACK_KINGSIDE;
+    if (strchr(token, 'q')) pos->castling_rights |= BLACK_QUEENSIDE;
+
+    // Parse en passant square
+    token = strtok(NULL, " ");
+    if (token[0] != '-') {
+        pos->en_passant = (token[1] - '1') * 8 + (token[0] - 'a'); // Convert to square index
+    } else {
+        pos->en_passant = -1; // No en passant
+    }
+
+    // Parse halfmove clock
+    token = strtok(NULL, " ");
+    pos->halfmove_clock = atoi(token);
+
+    // Parse fullmove number
+    token = strtok(NULL, " ");
+    pos->fullmove_number = atoi(token);
+}
+
+void print_moves(const Position* pos, const MoveList* list, const MagicData* magic) {
+    int side = pos->side_to_move;
+    static const char* flag_names[] = {
+        "QUIET", "CAPTURE", "DOUBLE_PUSH", "EN_PASSANT",
+        "CASTLE_KINGSIDE", "CASTLE_QUEENSIDE",
+        "PROMOTE_N", "PROMOTE_B", "PROMOTE_R", "PROMOTE_Q",
+        "PROMOTE_N_CAPTURE", "PROMOTE_B_CAPTURE", "PROMOTE_R_CAPTURE", "PROMOTE_Q_CAPTURE"
+    };
+
+    char san[16];
+
+    printf("Generated Moves:\n");
+    for (int i = 0; i < list->count; i++) {
+        int move = list->moves[i];
+        int flag = (move >> 12) & 0xF;
+
+        move_to_san(pos, move, san, magic);
+        const char* flag_str = (flag >= 0 && flag < 14) ? flag_names[flag] : "UNKNOWN";
+
+        printf("Move %d: %s, Flag: %s\n", i + 1, san, flag_str);
+    }
+    printf("Checking checkmate for %s\n", pos->side_to_move == 0 ? "White" : "Black");
+    printf("White king square: %d\n", pos->king_from[WHITE]);
+    printf("Black king square: %d\n", pos->king_from[BLACK]);
+    if (list->count == 0 && is_in_checkmate(pos, pos->side_to_move, magic)) {
+        printf("%s has no legal moves: he is in checkmate.\n", pos->side_to_move == 0 ? "White" : "Black");
+        fflush(stdout);
+        return;
+    } else if (list->count == 0 && is_in_stalemate(pos, pos->side_to_move, magic)) {
+        printf("%s has no legal moves: he is in stalemate.\n", pos->side_to_move == 0 ? "White" : "Black");
+        fflush(stdout);
+        return;
+    }
+}

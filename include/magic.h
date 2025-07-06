@@ -16,8 +16,8 @@ extern const int bishop_shifts_const[64];
 typedef struct {
     Bitboard rook_magics[64];
     Bitboard bishop_magics[64];
-    int rook_shifts[64];
-    int bishop_shifts[64];
+    uint32_t rook_shifts[64];
+    uint32_t bishop_shifts[64];
     Bitboard rook_masks[64];
     Bitboard bishop_masks[64];
     Bitboard rook_attack_table[64][MAX_ROOK_MOVES];
@@ -32,5 +32,8 @@ Bitboard mask_rook_blockers(int sq);
 Bitboard compute_rook_attacks(int sq, Bitboard blockers);
 
 void init_magic(MagicData* magic);
+
+int save_magic_tables(const MagicData* magic, const char* path);
+int load_magic_tables(MagicData* magic, const char* path);
 
 #endif

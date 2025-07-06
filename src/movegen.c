@@ -5,14 +5,19 @@
 #include "operations.h"
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 // Function to get the piece on a given square
-int get_piece_on_square(const Position* pos, int sq) {
+static inline int get_piece_on_square(const Position* pos, int sq) {
     // Initialize a bitboard with a bit set at the given square to compare with all piece bitboards 
     Bitboard piece_bb = 1ULL << sq;
     // For every piece bitboard, check if there is a piece on the same square as the previously set bitboard and return the piece if one is found
     for (int piece = 0; piece < 12; piece++) {
-        if (pos->pieces[piece] & piece_bb) return piece;
+        if (pos->pieces[piece] & piece_bb) {
+            // printf("Piece: %d\n", piece);
+            // print_bitboard(pos->pieces[piece]);
+            return piece;
+        }
     }
 
     // Return -1 if no piece is found
@@ -20,7 +25,7 @@ int get_piece_on_square(const Position* pos, int sq) {
 }
 
 // Is a given square attacked by a given side?
-int is_square_attacked(const Position* pos, int sq, int attacking_side, const MagicData* magic) {
+static inline int is_square_attacked(const Position* pos, int sq, int attacking_side, const MagicData* magic) {
 
     // If the pointer points to nothing, or if the square is out of bounds, return false
     if (!pos || sq < 0 || sq > 63) return 0;
@@ -35,14 +40,14 @@ int is_square_attacked(const Position* pos, int sq, int attacking_side, const Ma
     Bitboard pawns = pos->pieces[attacking_side == WHITE ? WP : BP];
     // Initialize a bitboard for all pawn attacks from the given square
     Bitboard pawn_attackers = (attacking_side == WHITE)
-        ? (((1ULL << sq) >> 9) & ~FILE_X(8)) | (((1ULL << sq) >> 7) & ~FILE_X(1))
-        : (((1ULL << sq) << 7) & ~FILE_X(8)) | (((1ULL << sq) << 9) & ~FILE_X(1));
+        ? (((1ULL << sq) & ~FILE_X(8)) >> 7) | (((1ULL << sq) & ~FILE_X(1)) >> 9)
+        : (((1ULL << sq) & ~FILE_X(1)) << 7) | (((1ULL << sq) & ~FILE_X(8)) << 9);
+
 
     if (pawns & pawn_attackers) {
-        printf("[DEBUG] pawn attack detected on square %d\n", sq);
+        // printf("[DEBUG] pawn attack detected on square %d\n", sq);
         return 1;
     }
-
 
     /* ---------- Knight attacks ---------- */
 
@@ -52,7 +57,7 @@ int is_square_attacked(const Position* pos, int sq, int attacking_side, const Ma
     Bitboard knight_moves = knight_attacks(sq);
     // If at least one knight on the bitboard intersects with at least one of the possible knight moves from the square, return true
     if (knights & knight_moves) {
-        printf("[DEBUG] knight attack detected on square %d\n", sq);
+        // printf("[DEBUG] knight attack detected on square %d\n", sq);
         // printf("  Knight attack detected on square %d\n", sq);
         // for (int i = 0; i < 64; i++) {
         //     if (knights & (1ULL << i)) {
@@ -71,7 +76,7 @@ int is_square_attacked(const Position* pos, int sq, int attacking_side, const Ma
     Bitboard bishop_moves = bishop_attacks(sq, pos->occupied[ALL], magic);
     // If at least one bishop or queen on the bitboard intersects with at least one of the possible bishop moves from the square, return true
     if (bishops_queens & bishop_moves) {
-        printf("[DEBUG] bishop/queen attack detected on square %d\n", sq);
+        // printf("[DEBUG] bishop/queen attack detected on square %d\n", sq);
         // printf("  Bishop/Queen attack detected on square %d\n", sq);
         // for (int i = 0; i < 64; i++) {
         //     if (bishops_queens & (1ULL << i)) {
@@ -90,7 +95,7 @@ int is_square_attacked(const Position* pos, int sq, int attacking_side, const Ma
     Bitboard rook_moves = rook_attacks(sq, pos->occupied[ALL], magic);
     // If at least one rook or queen on the bitboard intersects with at least one of the possible rook moves from the square, return true
     if (rooks_queens & rook_moves) {
-        printf("[DEBUG] rook/queen attack detected on square %d\n", sq);
+        // printf("[DEBUG] rook/queen attack detected on square %d\n", sq);
         // printf("  Rook/Queen attack detected on square %d\n", sq);
         // for (int i = 0; i < 64; i++) {
         //     if (rooks_queens & (1ULL << i)) {
@@ -109,7 +114,7 @@ int is_square_attacked(const Position* pos, int sq, int attacking_side, const Ma
     Bitboard king_moves = king_attacks(sq);
     // If the king's square on its bitboard intersects with at least one of the possible king moves from the square, return true
     if (kings & king_moves) {
-        printf("[DEBUG] king attack detected on square %d\n", sq);
+        // printf("[DEBUG] king attack detected on square %d\n", sq);
         // printf("  King attack detected on square %d\n", sq);
         return 1;
     }
@@ -123,12 +128,17 @@ int is_square_attacked(const Position* pos, int sq, int attacking_side, const Ma
 // Is the given side in check?
 int is_in_check(const Position* pos, int side, const MagicData* magic) {
     int king_sq = pos->king_from[side];
+    // printf("King square: %d\n", king_sq);
     // printf("[DEBUG] is_in_check: side=%s, king_sq=%d\n",
            // side == WHITE ? "WHITE" : "BLACK", king_sq);
+
+    // printf("[is_in_check] King on square: %d, Side: %s\n", king_sq, side == WHITE ? "White" : "Black");
 
     int attacked = is_square_attacked(pos, king_sq, side ^ 1, magic);
     // printf("[DEBUG] square %d attacked by %s? %s\n",
            // king_sq, side ^ 1 ? "BLACK" : "WHITE", attacked ? "YES" : "NO");
+
+    // printf("[is_in_check] Result: %s\n", attacked ? "CHECK" : "SAFE");
 
     return attacked;
 }
@@ -161,7 +171,10 @@ int is_in_stalemate(const Position* pos, int side, const MagicData* magic) {
 int make_move(Position* pos, MoveState* state, int move) {
 
     // If either the position or state pointers point to nothing, or the encoded move has no value, don't make the move
-    if (!pos || !state || move == 0) return 0;
+    if (!pos || !state || move == 0) {
+        printf("[make_move] Invalid input or zero move\n");
+        return 0;
+    }
 
     // Decode the move
     int from = (move >> 6) & 0x3f;
@@ -177,7 +190,10 @@ int make_move(Position* pos, MoveState* state, int move) {
     // Set the piece that will be moved 
     int moved_piece = get_piece_on_square(pos, from);
     // If there is no piece, don't make the move
-    if (moved_piece == -1) return 0;
+    if (moved_piece == -1) {
+        printf("[make_move] No piece on from-square %d\n", from);
+        return 0;
+    }
     // if (side == BLACK) printf("Moved piece: %d\n", moved_piece);
     // Set the piece that will be captured, checking if it's an en passant capture
     int captured_piece = (flag == EN_PASSANT)
@@ -204,6 +220,8 @@ int make_move(Position* pos, MoveState* state, int move) {
         .king_sq[BLACK] = pos->king_from[BLACK]
     };
 
+    memcpy(state->rook_from_before, pos->rook_from, sizeof(pos->rook_from));
+
     // Reset en passant square
     pos->en_passant = -1;
 
@@ -223,12 +241,14 @@ int make_move(Position* pos, MoveState* state, int move) {
     pos->occupied[side] &= ~from_bb;
 
     // Handle capture
-    if (flag == EN_PASSANT && captured_piece != -1) {
+    if (captured_piece == WK || captured_piece == BK) {
+        printf("ERROR: King illegally captured at %d\n", to);
+        return 0;
+    } else if (flag == EN_PASSANT && captured_piece != -1) {
         int cap_sq = (side == WHITE) ? to - 8 : to + 8;
         Bitboard cap_bb = 1ULL << cap_sq;
         pos->pieces[captured_piece] &= ~cap_bb;
         pos->occupied[!side] &= ~cap_bb;
-
     } else if (captured_piece != -1) {
         pos->pieces[captured_piece] &= ~to_bb;
         pos->occupied[!side] &= ~to_bb;
@@ -244,16 +264,18 @@ int make_move(Position* pos, MoveState* state, int move) {
 
         promoted_piece = (side == WHITE ? WN : BN) + promote_index;
         pos->pieces[promoted_piece] |= to_bb;
+        pos->occupied[side] |= to_bb;
         state->promoted_piece = promoted_piece;
 
     } else {
         pos->pieces[moved_piece] |= to_bb;
+        pos->occupied[side] |= to_bb;
     }
 
     // Handle castling
     if (flag == CASTLE_KINGSIDE || flag == CASTLE_QUEENSIDE) {
         int rook = (side == WHITE) ? WR : BR;
-        int index = (side == WHITE ? 0 : 2) + (flag == CASTLE_QUEENSIDE);
+        int index = (side == WHITE ? 0 : 2) + (flag == CASTLE_KINGSIDE);
         int rook_from = pos->rook_from[index];
         int rook_to = pos->rook_to[index];
         Bitboard rf_bb = 1ULL << rook_from;
@@ -263,26 +285,46 @@ int make_move(Position* pos, MoveState* state, int move) {
         pos->pieces[rook] |= rt_bb;
         pos->occupied[side] &= ~rf_bb;
         pos->occupied[side] |= rt_bb;
+        // Update rook_from[] for castling to reflect that the rook has moved
+        pos->rook_from[index] = rook_to;
     }
 
-    // Update king square
-    if ((moved_piece & 7) == K)
-        pos->king_from[side] = to;
+    // Clear castling rights if rook moves or is captured
+    if (moved_piece == WR) {
+        if (from == pos->rook_from[WHITE_QUEENSIDE_ROOK]) pos->castling_rights &= ~WHITE_QUEENSIDE;
+        else if (from == pos->rook_from[WHITE_KINGSIDE_ROOK]) pos->castling_rights &= ~WHITE_KINGSIDE;
+    }
+    if (captured_piece == WR) {
+        if (to == pos->rook_from[WHITE_QUEENSIDE_ROOK]) pos->castling_rights &= ~WHITE_QUEENSIDE;
+        else if (to == pos->rook_from[WHITE_KINGSIDE_ROOK]) pos->castling_rights &= ~WHITE_KINGSIDE;
+    }
+    if (moved_piece == BR) {
+        if (from == pos->rook_from[BLACK_QUEENSIDE_ROOK]) pos->castling_rights &= ~BLACK_QUEENSIDE;
+        else if (from == pos->rook_from[BLACK_KINGSIDE_ROOK]) pos->castling_rights &= ~BLACK_KINGSIDE;
+    }
+    if (captured_piece == BR) {
+        if (to == pos->rook_from[BLACK_QUEENSIDE_ROOK]) pos->castling_rights &= ~BLACK_QUEENSIDE;
+        else if (to == pos->rook_from[BLACK_KINGSIDE_ROOK]) pos->castling_rights &= ~BLACK_KINGSIDE;
+    }
+
+    // Update king square and disable castling rights
+    if (moved_piece == WK) {
+        pos->king_from[WHITE] = to;
+        pos->castling_rights &= ~(WHITE_KINGSIDE | WHITE_QUEENSIDE);
+    }
+    if (moved_piece == BK) {
+        pos->king_from[BLACK] = to;
+        pos->castling_rights &= ~(BLACK_KINGSIDE | BLACK_QUEENSIDE);
+    }
 
     // Update occupied and side
-    pos->occupied[2] = pos->occupied[WHITE] | pos->occupied[BLACK];
-    pos->side_to_move = !side;
+    pos->occupied[ALL] = pos->occupied[WHITE] | pos->occupied[BLACK];
+    pos->side_to_move = side ^ 1;
 
     // Double pawn push: set en passant square
     if (flag == DOUBLE_PUSH)
         pos->en_passant = (side == WHITE) ? to - 8 : to + 8;
-    
-    if (side == BLACK && (moved_piece & 7) == K) {
-        int ksq = pos->king_from[BLACK];
-        if (!(pos->pieces[BK] & (1ULL << ksq))) {
-            // printf("ERROR: king_from[BLACK]=%d, but BK bitboard doesn't match\n", ksq);
-        }
-    }
+
     return 1;
 }
 
@@ -296,6 +338,11 @@ int unmake_move(Position* pos, const MoveState* state) {
 
     Bitboard from_bb = 1ULL << from;
     Bitboard to_bb = 1ULL << to;
+
+    // printf("[unmake_move] BEFORE undo:\n");
+    // print_bitboard(pos->pieces[WK]);
+    // print_bitboard(pos->occupied[WHITE]);
+    // print_bitboard(pos->occupied[BLACK]);
 
     int moved_piece = state->moved_piece;
     int captured_piece = state->captured_piece;
@@ -338,27 +385,38 @@ int unmake_move(Position* pos, const MoveState* state) {
     // Undo castling
     if (flag == CASTLE_KINGSIDE || flag == CASTLE_QUEENSIDE) {
         int rook = (side == WHITE) ? WR : BR;
-        int rook_from = pos->rook_from[flag - CASTLE_KINGSIDE + (side * 2)];
-        int rook_to = pos->rook_to[flag - CASTLE_KINGSIDE + (side * 2)];
+        int index = (side == WHITE ? 0 : 2) + (flag == CASTLE_KINGSIDE);
+
+        // Restore rook position from saved state
+        int rook_from = state->rook_from_before[index];  // Original rook square
+        int rook_to   = pos->rook_to[index];             // Where rook was moved to
+
         Bitboard rf_bb = 1ULL << rook_from;
         Bitboard rt_bb = 1ULL << rook_to;
 
+        // Move rook back
         pos->pieces[rook] &= ~rt_bb;
         pos->pieces[rook] |= rf_bb;
         pos->occupied[side] &= ~rt_bb;
         pos->occupied[side] |= rf_bb;
+
+        // Restore rook_from[] now
+        memcpy(pos->rook_from, state->rook_from_before, sizeof(pos->rook_from));
     }
 
     // Recompute full occupancy
-    pos->occupied[2] = pos->occupied[WHITE] | pos->occupied[BLACK];
+    pos->occupied[ALL] = pos->occupied[WHITE] | pos->occupied[BLACK];
+
+    // printf("[unmake_move] AFTER undo:\n");
+    // print_bitboard(pos->pieces[WK]);
+    // print_bitboard(pos->occupied[WHITE]);
+    // print_bitboard(pos->occupied[BLACK]);
 
     return 1;
 }
 
-int is_legal_move(Position* pos, int move, const MagicData* magic) {
+int is_legal_move(Position* pos, int move, int side, const MagicData* magic) {
     if (!pos || move == 0) return 0;
-
-    int side = pos->side_to_move;
 
     // If the king is the piece moving, we need to track its new square
     int from = (move >> 6) & 0x3F;
@@ -368,11 +426,18 @@ int is_legal_move(Position* pos, int move, const MagicData* magic) {
     // Create a shallow copy of the Position struct
     Position temp = *pos;
     MoveState state;
-    if (!make_move(&temp, &state, move))
+    memcpy(&temp, pos, sizeof(Position));
+    if (!make_move(&temp, &state, move)) {
         return 0; // illegal move due to malformed input
+    }
+
+    // printf("[DEBUG] After move %d:\n", move);
+    // print_position(&temp);
 
     // After move, is king in check? make_move() only switches the side to move in the temp position, so we don't have to switch back
-    int in_check = is_in_check(&temp, side, magic);
+    int in_check = is_in_check(&temp, temp.side_to_move ^ 1, magic);
+    // move_to_string(move);
+    // printf("Still in check? %d\n", in_check);
 
     return !in_check;
 }
@@ -393,16 +458,19 @@ void generate_legal_moves(const Position* pos, MoveList* list, int side, const M
 
         // printf("Checking move from %d to %d\n", from, to);
 
-        Position temp = *pos; // shallow copy
-        if (is_legal_move(&temp, move, magic)) {
+        if (is_legal_move(pos, move, side, magic)) {
             list->moves[list->count++] = move;
+            // printf("[generate_legal_moves] Legal move: %d\n", move);
             // printf("Legal move added\n");
         } // else printf("Illegal move skipped\n");
     }
+
+    // printf("[generate_legal_moves] Total legal moves: %d\n", list->count);
 }
 
 void generate_pseudo_legal_moves(const Position* pos, MoveList* list, int side, const MagicData* magic) {
     if (!pos || !list) return;
+    memset(list->moves, 0, MAX_MOVES * sizeof(int));
     list->count = 0; // Reset move count
 
     // Generate moves for each piece type
@@ -415,7 +483,7 @@ void generate_pseudo_legal_moves(const Position* pos, MoveList* list, int side, 
 }
 
 // Function to generate moves for all pawns on the bitboard
-void generate_pawn_moves(const Position* pos, MoveList* list, int side) {
+static inline void generate_pawn_moves(const Position* pos, MoveList* list, int side) {
     if (!pos || !list) return;
     // Get the pawn bitboard for the current side
     Bitboard pawns = pos->pieces[side == WHITE ? WP : BP];
@@ -636,7 +704,7 @@ Bitboard knight_attacks(int sq) {
 }
 
 // Function to generate moves for all knights on the bitboard
-void generate_knight_moves(const Position* pos, MoveList* list, int side) {
+static inline void generate_knight_moves(const Position* pos, MoveList* list, int side) {
     if (!pos || !list) return;
     // Get the knight bitboard for the current side
     Bitboard knights = pos->pieces[side == WHITE ? WN : BN];
@@ -689,7 +757,7 @@ Bitboard bishop_attacks(int sq, Bitboard occupancy, const MagicData* magic) {
 }
 
 // Function to generate moves for all bishops on the bitboard
-void generate_bishop_moves(const Position* pos, MoveList* list, int side, const MagicData* magic) {
+static inline void generate_bishop_moves(const Position* pos, MoveList* list, int side, const MagicData* magic) {
     if (!pos || !list) return;
    // Get the bishop bitboard for the current side
     Bitboard bishops = pos->pieces[side == WHITE ? WB : BB];
@@ -746,7 +814,7 @@ Bitboard rook_attacks(int sq, Bitboard occupancy, const MagicData* magic) {
 }
 
 // Function to generate moves for all rooks on the bitboard
-void generate_rook_moves(const Position* pos, MoveList* list, int side, const MagicData* magic) {
+static inline void generate_rook_moves(const Position* pos, MoveList* list, int side, const MagicData* magic) {
     if (!pos || !list) return;
     // Get the rook bitboard for the current side
     Bitboard rooks = pos->pieces[side == WHITE ? WR : BR];
@@ -800,7 +868,7 @@ Bitboard queen_attacks(int sq, Bitboard occupancy, const MagicData* magic) {
 }
 
 // Function to generate moves for all queens on the bitboard
-void generate_queen_moves(const Position* pos, MoveList* list, int side, const MagicData* magic) {
+static inline void generate_queen_moves(const Position* pos, MoveList* list, int side, const MagicData* magic) {
     if (!pos || !list) return;
     // Get the queen bitboard for the current side
     Bitboard queens = pos->pieces[side == WHITE ? WQ : BQ];
@@ -874,112 +942,82 @@ Bitboard king_attacks(int sq) {
 }
 
 // Function to generate moves for all kings on the bitboard
-void generate_king_moves(const Position* pos, MoveList* list, int side, const MagicData* magic) {
+static inline void generate_king_moves(const Position* pos, MoveList* list, int side, const MagicData* magic) {
     if (!pos || !list) return;
-    // Get the knight bitboard for the current side
-    Bitboard king = pos->pieces[side == WHITE ? WK : BK];
-    // Get the occupied squares for the current side
+
+    Bitboard king_bb = pos->pieces[side == WHITE ? WK : BK];
     Bitboard own = pos->occupied[side];
-    // Get the occupied squares for the opponent
     Bitboard opp = pos->occupied[side ^ 1];
-    // Get the enemy king bitboard
     Bitboard enemy_king = pos->pieces[side ? WK : BK];
 
-    // For each king on the bitboard (should only be 1 per side!)
-    while (king) {
-        // Get the square of the first king on the bitboard (start checking set bits from a1)
-        int from = get_lsb(king);
-        // Initialize the target square
-        int to = 0;
-        // Skip if the square is out of bounds
-        if (!ON_BOARD(from)) {
-            king = pop_lsb(king);
-            continue;
-        }
+    while (king_bb) {
+        int from = get_lsb(king_bb);
+        Bitboard moves = king_attacks(from) & ~own & ~enemy_king;
 
-        // Get the king moves from the current square, removing moves to own pieces and the enemy king
-        Bitboard all_king_moves = king_attacks(from) & ~own & ~enemy_king;
-
-        // For each generated king move on the bitboard
-        while (all_king_moves) {
-            // Get the target square from the king moves
-            to = get_lsb(all_king_moves);
-            // Remove the move if out of bounds
-            if (!ON_BOARD(to)) {
-                all_king_moves = pop_lsb(all_king_moves);
-                continue;
-            }
-            // Determine if the move is a capture or a quiet move
+        while (moves) {
+            int to = get_lsb(moves);
             int flag = (opp & (1ULL << to)) ? CAPTURE : QUIET;
-            // Add the move to the list
             SAFE_ADD_MOVE(list, from, to, flag);
-            // Remove the move from the bitboard
-            all_king_moves = pop_lsb(all_king_moves);
+            moves = pop_lsb(moves);
         }
 
         /* ---------- Castling ---------- */
 
-        // Castling logic inside while (king) loop
         int king_from = from;
-        int king_to;
         Bitboard occupied = pos->occupied[ALL];
-
-        // Kingside
-        if ((side == WHITE && (pos->castling_rights & WHITE_KINGSIDE)) ||
-            (side == BLACK && (pos->castling_rights & BLACK_KINGSIDE))) {
-
-            int rook_from = pos->rook_from[side == WHITE ? WHITE_KINGSIDE_ROOK : BLACK_KINGSIDE_ROOK];
-            king_to = side == WHITE ? G1 : G8;
-            int rook_to = side == WHITE ? F1 : F8;
-
-            Bitboard between = squares_between_exclusive(king_from, rook_from);
-            Bitboard castling_path = between | (1ULL << king_to);
-            
-            bool path_clear = !(occupied & between);
-            bool not_attacked = !is_square_attacked(pos, king_from, side ^ 1, magic); // king not in check
-            
-            Bitboard check_path = castling_path;
-            while (check_path && not_attacked) {
-                int sq = get_lsb(check_path);
-                if (is_square_attacked(pos, sq, side ^ 1, magic)) {
-                    not_attacked = false;
-                }
-                check_path = pop_lsb(check_path);
-            }
-
-            if (path_clear && not_attacked) {
-                SAFE_ADD_MOVE(list, king_from, king_to, CASTLE_KINGSIDE);
-            }
+        if (!(pos->pieces[side == WHITE ? WK : BK] & (1ULL << king_from))) {
+            king_bb = pop_lsb(king_bb);
+            continue;
         }
 
-        // Queenside
-        if ((side == WHITE && (pos->castling_rights & WHITE_QUEENSIDE)) ||
-            (side == BLACK && (pos->castling_rights & BLACK_QUEENSIDE))) {
+        // Loop over both castling sides (0 = K-side, 1 = Q-side)
+        for (int i = 0; i < 2; i++) {
+            int castling_rights = (side == WHITE)
+                           ? (i == 0 ? WHITE_QUEENSIDE : WHITE_KINGSIDE)
+                           : (i == 0 ? BLACK_QUEENSIDE : BLACK_KINGSIDE);
+            int rook_index = (side == WHITE ? WHITE_QUEENSIDE_ROOK : BLACK_QUEENSIDE_ROOK) + i;
+            int king_to = (side == WHITE)
+                        ? (i == 0 ? C1 : G1)
+                        : (i == 0 ? C8 : G8);
 
-            int rook_from = pos->rook_from[side == WHITE ? WHITE_QUEENSIDE_ROOK : BLACK_QUEENSIDE_ROOK];
-            king_to = side == WHITE ? C1 : C8;
-            int rook_to = side == WHITE ? D1 : D8;
+            if (!(pos->castling_rights & castling_rights)) continue;
 
-            Bitboard between = squares_between_exclusive(king_from, rook_from);
-            Bitboard castling_path = between | (1ULL << king_to);
-            
-            bool path_clear = !(occupied & between);
-            bool not_attacked = !is_square_attacked(pos, king_from, side ^ 1, magic); // king not in check
-            
-            Bitboard check_path = castling_path;
-            while (check_path && not_attacked) {
-                int sq = get_lsb(check_path);
+            int rook_from = pos->rook_from[rook_index];
+            int rook_to = pos->rook_to[rook_index];
+
+            Bitboard rook_bb = 1ULL << rook_from;
+            Bitboard rook_piece_bb = pos->pieces[side == WHITE ? WR : BR];
+            if (!(rook_piece_bb & rook_bb)) continue; // Rook missing
+
+            // Step 1: Path between king and rook must be clear
+            Bitboard between_kr = squares_between_exclusive(king_from, rook_from);
+            if (occupied & between_kr) continue;
+
+            // Step 2: King's path must be safe and clear
+            int min_sq = (king_from < king_to) ? king_from : king_to;
+            int max_sq = (king_from > king_to) ? king_from : king_to;
+            Bitboard king_path = squares_between_exclusive(min_sq, max_sq) | (1ULL << king_to) | (1ULL << king_from);
+
+            if (is_square_attacked(pos, king_from, side ^ 1, magic)) continue;
+
+            bool safe = true;
+            Bitboard path = king_path;
+            while (path) {
+                int sq = get_lsb(path);
                 if (is_square_attacked(pos, sq, side ^ 1, magic)) {
-                    not_attacked = false;
+                    safe = false;
+                    break;
                 }
-                check_path = pop_lsb(check_path);
+                path = pop_lsb(path);
             }
 
-            if (path_clear && not_attacked) {
-                SAFE_ADD_MOVE(list, king_from, king_to, CASTLE_QUEENSIDE);
-            }
+            if (!safe) continue;
+
+            // Passed all checks – add the castling move
+            int flag = (i == 0) ? CASTLE_QUEENSIDE : CASTLE_KINGSIDE;
+            SAFE_ADD_MOVE(list, king_from, king_to, flag);
         }
-        // Remove the king from the bitboard to iterate to the next king (should only be one)
-        king = pop_lsb(king);
+
+        king_bb = pop_lsb(king_bb);
     }
 }

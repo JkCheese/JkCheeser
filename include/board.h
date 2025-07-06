@@ -56,17 +56,17 @@ typedef enum {
 } ColoredPieceType;
 
 typedef enum {
-    WHITE_KINGSIDE = 1,
-    WHITE_QUEENSIDE = 2,
-    BLACK_KINGSIDE = 4,
-    BLACK_QUEENSIDE = 8
+    WHITE_QUEENSIDE = 1,
+    WHITE_KINGSIDE = 2,
+    BLACK_QUEENSIDE = 4,
+    BLACK_KINGSIDE = 8
 } CastlingRights;
 
 typedef enum {
-    WHITE_KINGSIDE_ROOK,
     WHITE_QUEENSIDE_ROOK,
-    BLACK_KINGSIDE_ROOK,
-    BLACK_QUEENSIDE_ROOK
+    WHITE_KINGSIDE_ROOK,
+    BLACK_QUEENSIDE_ROOK,
+    BLACK_KINGSIDE_ROOK
 } RookType;
 
 typedef enum {
@@ -74,8 +74,8 @@ typedef enum {
     CAPTURE = 1,
     DOUBLE_PUSH = 2,
     EN_PASSANT = 3,
-    CASTLE_KINGSIDE = 4,
-    CASTLE_QUEENSIDE = 5,
+    CASTLE_QUEENSIDE = 4,
+    CASTLE_KINGSIDE = 5,
     PROMOTE_N = 6,
     PROMOTE_B = 7,
     PROMOTE_R = 8,
@@ -87,8 +87,11 @@ typedef enum {
 } MoveFlags;
 
 void init_position(Position* pos, const char* fen);
+Bitboard squares_between_inclusive(int a, int b);
 Bitboard squares_between_exclusive(int a, int b);
 void print_board(const Position* pos);
+void print_bitboard(Bitboard bb);
+void print_position(const Position* pos);
 int piece_index(char c);
 
 #endif

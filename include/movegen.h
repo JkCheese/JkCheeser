@@ -40,6 +40,7 @@ typedef struct {
     int castling_rights; // Bitmask for castling rights
     int halfmove_clock;
     int fullmove_number;
+    int rook_from_before[4];
 } MoveState;
 
 // Bishop attack API
@@ -56,18 +57,18 @@ Bitboard rook_attacks(int sq, Bitboard occupancy, const MagicData* magic);
 Bitboard queen_attacks(int sq, Bitboard occupancy, const MagicData* magic);
 
 // Individual piece move generation functions
-void generate_pawn_moves(const Position* pos, MoveList* list, int side);
+static inline void generate_pawn_moves(const Position* pos, MoveList* list, int side);
 Bitboard knight_attacks(int sq);
-void generate_knight_moves(const Position* pos, MoveList* list, int side);
-void generate_bishop_moves(const Position* pos, MoveList* list, int side, const MagicData* magic);
-void generate_rook_moves(const Position* pos, MoveList* list, int side, const MagicData* magic);
-void generate_queen_moves(const Position* pos, MoveList* list, int side, const MagicData* magic);
-void generate_king_moves(const Position* pos, MoveList* list, int side, const MagicData* magic);
+static inline void generate_knight_moves(const Position* pos, MoveList* list, int side);
+static inline void generate_bishop_moves(const Position* pos, MoveList* list, int side, const MagicData* magic);
+static inline void generate_rook_moves(const Position* pos, MoveList* list, int side, const MagicData* magic);
+static inline void generate_queen_moves(const Position* pos, MoveList* list, int side, const MagicData* magic);
+static inline void generate_king_moves(const Position* pos, MoveList* list, int side, const MagicData* magic);
 Bitboard king_attacks(int sq);
 
 // Legal move generation and attack functions
-int is_square_attacked(const Position* pos, int sq, int side, const MagicData* magic);
-int is_legal_move(Position* pos, int move, const MagicData* magic);
+static inline int is_square_attacked(const Position* pos, int sq, int side, const MagicData* magic);
+int is_legal_move(Position* pos, int move, int side, const MagicData* magic);
 void generate_pseudo_legal_moves(const Position* pos, MoveList* list, int side, const MagicData* magic);
 void generate_legal_moves(const Position* pos, MoveList* list, int side, const MagicData* magic);
 
@@ -81,7 +82,7 @@ int make_move(Position* pos, MoveState* state, int move);
 int unmake_move(Position* pos, const MoveState* state);
 
 // General helper functions
-int get_piece_on_square(const Position* pos, int sq);
+static inline int get_piece_on_square(const Position* pos, int sq);
 void print_moves(const Position* pos, const MoveList* list, const MagicData* magic);
 
 #endif

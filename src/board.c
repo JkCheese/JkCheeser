@@ -21,25 +21,39 @@ int piece_index(char c) {
     }
 }
 
-Bitboard squares_between_exclusive(int a, int b) {
+Bitboard squares_between_inclusive(int a, int b) {
     Bitboard bb = 0;
+    if (a == b) return 1ULL << a;
 
-    // Return 0 if a and b are the same square
+    int step = 0;
+
+    if (RANK(a) == RANK(b)) step = (b > a) ? 1 : -1;
+    else if (FILE(a) == FILE(b)) step = (b > a) ? 8 : -8;
+    else if (abs(FILE(a) - FILE(b)) == abs(RANK(a) - RANK(b))) {
+        step = (b > a) ? ((FILE(b) > FILE(a)) ? 9 : 7) : ((FILE(b) > FILE(a)) ? -7 : -9);
+    } else return 0;
+
+    for (int sq = a; ; sq += step) {
+        bb |= 1ULL << sq;
+        if (sq == b) break;
+    }
+    return bb;
+}
+
+Bitboard squares_between_exclusive(int a, int b) {
     if (a == b) return 0;
+    Bitboard bb = 0;
 
     int step = 0;
 
     if (RANK(a) == RANK(b)) {
-        // Same rank: move left/right
         step = (b > a) ? 1 : -1;
     } else if (FILE(a) == FILE(b)) {
-        // Same file: move up/down
         step = (b > a) ? 8 : -8;
     } else if (abs(FILE(a) - FILE(b)) == abs(RANK(a) - RANK(b))) {
-        // Diagonal
-        step = (b > a) ? ((FILE(b) > FILE(a)) ? 9 : 7) : ((FILE(b) > FILE(a)) ? -7 : -9);
+        step = (b > a) ? ((FILE(b) > FILE(a)) ? 9 : 7)
+                      : ((FILE(b) > FILE(a)) ? -7 : -9);
     } else {
-        // Not aligned in a straight path
         return 0;
     }
 
@@ -47,6 +61,47 @@ Bitboard squares_between_exclusive(int a, int b) {
         bb |= 1ULL << sq;
 
     return bb;
+}
+
+void print_position(const Position* pos) {
+    if (!pos) return;
+
+    printf("Position:\n");
+    printf("  Side to move: %s\n", pos->side_to_move == WHITE ? "White" : "Black");
+    printf("  En passant square: %d\n", pos->en_passant);
+    printf("  Castling rights: 0x%X\n", pos->castling_rights);
+    printf("  Halfmove clock: %d\n", pos->halfmove_clock);
+    printf("  Fullmove number: %d\n", pos->fullmove_number);
+    printf("  King squares: White = %d, Black = %d\n", pos->king_from[WHITE], pos->king_from[BLACK]);
+
+    printf("  Occupied bitboards:\n");
+    printf("    White:   0x%016llX\n", pos->occupied[WHITE]);
+    printf("    Black:   0x%016llX\n", pos->occupied[BLACK]);
+    printf("    All:     0x%016llX\n", pos->occupied[ALL]);
+
+    printf("  Piece bitboards:\n");
+    const char* piece_names[12] = {
+        "WP", "WN", "WB", "WR", "WQ", "WK",
+        "BP", "BN", "BB", "BR", "BQ", "BK"
+    };
+
+    for (int i = 0; i < 12; i++) {
+        printf("    %s: 0x%016llX\n", piece_names[i], pos->pieces[i]);
+    }
+}
+
+void print_bitboard(Bitboard bb) {
+    printf("\n  +-----------------+\n");
+    for (int rank = 7; rank >= 0; --rank) {
+        printf("%d | ", rank + 1);
+        for (int file = 0; file < 8; ++file) {
+            int sq = rank * 8 + file;
+            printf("%c ", (bb & (1ULL << sq)) ? '1' : '.');
+        }
+        printf("|\n");
+    }
+    printf("  +-----------------+\n");
+    printf("    a b c d e f g h\n\n");
 }
 
 void print_board(const Position* pos) {
@@ -83,6 +138,15 @@ void init_position(Position* pos, const char* fen) {
 
     // Setting up the pieces
     int square = 56;
+    int white_rook_count = 0;
+    int black_rook_count = 0;
+
+    // Rook positions after castling
+    pos->rook_to[WHITE_QUEENSIDE_ROOK] = 3; // d1
+    pos->rook_to[WHITE_KINGSIDE_ROOK] = 5;  // f1
+    pos->rook_to[BLACK_QUEENSIDE_ROOK] = 59; // d8
+    pos->rook_to[BLACK_KINGSIDE_ROOK] = 61; // f8
+
     for (char* c = token; *c; c++) {
         if (*c >= '1' && *c <= '8') {
             square += (*c - '0'); // Skip squares
@@ -99,18 +163,20 @@ void init_position(Position* pos, const char* fen) {
                 if (*c == 'K') pos->king_from[WHITE] = square;
                 if (*c == 'k') pos->king_from[BLACK] = square;
                 if (*c == 'R') {
-                    if (square < pos->king_from[WHITE]) {
+                    white_rook_count++;
+                    if (white_rook_count == 1) {
                         pos->rook_from[WHITE_QUEENSIDE_ROOK] = square;
                     } else {
                         pos->rook_from[WHITE_KINGSIDE_ROOK] = square;
                     }                               
                 }
                 if (*c == 'r') {
-                    if (square < pos->king_from[BLACK]) {
+                    black_rook_count++;
+                    if (black_rook_count == 1) {
                         pos->rook_from[BLACK_QUEENSIDE_ROOK] = square;
                     } else {
                         pos->rook_from[BLACK_KINGSIDE_ROOK] = square;
-                    }
+                    } 
                 }
             }
             square++;
@@ -127,6 +193,7 @@ void init_position(Position* pos, const char* fen) {
     if (strchr(token, 'Q')) pos->castling_rights |= WHITE_QUEENSIDE;
     if (strchr(token, 'k')) pos->castling_rights |= BLACK_KINGSIDE;
     if (strchr(token, 'q')) pos->castling_rights |= BLACK_QUEENSIDE;
+    printf("Castling rights: %d\n", pos->castling_rights);
 
     // Parse en passant square
     token = strtok(NULL, " ");
@@ -149,7 +216,7 @@ void print_moves(const Position* pos, const MoveList* list, const MagicData* mag
     int side = pos->side_to_move;
     static const char* flag_names[] = {
         "QUIET", "CAPTURE", "DOUBLE_PUSH", "EN_PASSANT",
-        "CASTLE_KINGSIDE", "CASTLE_QUEENSIDE",
+        "CASTLE_QUEENSIDE", "CASTLE_KINGSIDE",
         "PROMOTE_N", "PROMOTE_B", "PROMOTE_R", "PROMOTE_Q",
         "PROMOTE_N_CAPTURE", "PROMOTE_B_CAPTURE", "PROMOTE_R_CAPTURE", "PROMOTE_Q_CAPTURE"
     };
@@ -166,16 +233,16 @@ void print_moves(const Position* pos, const MoveList* list, const MagicData* mag
 
         printf("Move %d: %s, Flag: %s\n", i + 1, san, flag_str);
     }
-    printf("Checking checkmate for %s\n", pos->side_to_move == 0 ? "White" : "Black");
-    printf("White king square: %d\n", pos->king_from[WHITE]);
-    printf("Black king square: %d\n", pos->king_from[BLACK]);
-    if (list->count == 0 && is_in_checkmate(pos, pos->side_to_move, magic)) {
-        printf("%s has no legal moves: he is in checkmate.\n", pos->side_to_move == 0 ? "White" : "Black");
-        fflush(stdout);
-        return;
-    } else if (list->count == 0 && is_in_stalemate(pos, pos->side_to_move, magic)) {
-        printf("%s has no legal moves: he is in stalemate.\n", pos->side_to_move == 0 ? "White" : "Black");
-        fflush(stdout);
-        return;
-    }
+    // printf("Checking checkmate for %s\n", pos->side_to_move == 0 ? "White" : "Black");
+    // printf("White king square: %d\n", pos->king_from[WHITE]);
+    // printf("Black king square: %d\n", pos->king_from[BLACK]);
+    // if (list->count == 0 && is_in_checkmate(pos, pos->side_to_move, magic)) {
+    //     printf("%s has no legal moves: he is in checkmate.\n", pos->side_to_move == 0 ? "White" : "Black");
+    //     fflush(stdout);
+    //     return;
+    // } else if (list->count == 0 && is_in_stalemate(pos, pos->side_to_move, magic)) {
+    //     printf("%s has no legal moves: he is in stalemate.\n", pos->side_to_move == 0 ? "White" : "Black");
+    //     fflush(stdout);
+    //     return;
+    // }
 }

@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -Iinclude
+CFLAGS = -Wall -Wextra -std=c11 -Iinclude -O3 -march=native
 
 SRC = \
 	src/board.c \
@@ -7,7 +7,8 @@ SRC = \
 	src/moveformat.c \
 	src/movegen.c \
 	src/magic.c \
-	src/main.c
+	src/main.c \
+	src/test.c
 
 OBJ = $(SRC:.c=.o)
 BIN = engine2

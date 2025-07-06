@@ -212,40 +212,17 @@ Bitboard compute_bishop_attacks(int sq, Bitboard blockers) {
 // Compute blocker mask for rooks
 Bitboard mask_rook_blockers(int sq) {
     Bitboard mask = 0ULL;
+    int rank = sq / 8;
+    int file = sq % 8;
 
-    for (int d = 0; d < 4; d++) {
-        int delta = rook_deltas[d];
-        int s = sq;
-        
-        if (sq == 0) return 0x010101010101017eULL;
-        else if (sq == 7) return 0x808080808080807eULL;
-        else if (sq == 56) return 0x7e01010101010101ULL;
-        else if (sq == 63) return 0x7e80808080808080ULL;
-
-        while (1) {
-            s += delta;
-            if (!ON_BOARD(s)) break;
-            if (!is_valid_rook(sq, s)) break;
-            else if (RANK(sq) == 0) {
-                if (RANK(s) == 7 || FILE(s) == 0 || FILE(s) == 7) break;
-            } else if (RANK(sq) == 7) {
-                if (RANK(s) == 0 || FILE(s) == 0 || FILE(s) == 7) break;
-            } else if (FILE(sq) == 0) {
-                if (FILE(s) == 7 || RANK(s) == 0 || RANK(s) == 7) break;
-            } else if (FILE(sq) == 7) {
-                if (FILE(s) == 0 || RANK(s) == 0 || RANK(s) == 7) break;
-            } else {
-                if (RANK(s) == 0 || RANK(s) == 7 || FILE(s) == 0 || FILE(s) == 7) break;
-            }
-            mask |= (1ULL << s);    
-        }
-    }
-
-    // printf("Rook mask for sq %d: ", sq);
-    // for (int i = 0; i < 64; i++) {
-    //     if (mask & (1ULL << i)) printf("%d ", i);
-    // }
-    // printf("\n");
+    // Up
+    for (int r = rank + 1; r <= 6; r++) mask |= (1ULL << (r * 8 + file));
+    // Down
+    for (int r = rank - 1; r >= 1; r--) mask |= (1ULL << (r * 8 + file));
+    // Right
+    for (int f = file + 1; f <= 6; f++) mask |= (1ULL << (rank * 8 + f));
+    // Left
+    for (int f = file - 1; f >= 1; f--) mask |= (1ULL << (rank * 8 + f));
 
     return mask;
 }
@@ -290,6 +267,12 @@ Bitboard set_blockers_from_index(uint64_t index, Bitboard mask) {
 }
 
 void init_magic(MagicData* magic) {
+
+    if (load_magic_tables(magic, "magictable.bin")) {
+        // printf("Loaded magic tables from disk.\n");
+        return;
+    }
+    
     // printf("init_magic() called\n");
     // memset(magic, 0, sizeof(MagicData)); // or memset(magic->bishop_shifts, 0, sizeof(magic->bishop_shifts));
     memcpy(magic->rook_magics, rook_magics_const, sizeof(rook_magics_const));
@@ -330,4 +313,25 @@ void init_magic(MagicData* magic) {
         }
         // printf("init_magic success\n");
     }
+
+    save_magic_tables(magic, "magictable.bin");
+    // printf("Saved magic tables to disk.\n");
+}
+
+int save_magic_tables(const MagicData* magic, const char* path) {
+    FILE* f = fopen(path, "wb");
+    if (!f) return 0;
+
+    size_t written = fwrite(magic, sizeof(MagicData), 1, f);
+    fclose(f);
+    return written == 1;
+}
+
+int load_magic_tables(MagicData* magic, const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return 0;
+
+    size_t read = fread(magic, sizeof(MagicData), 1, f);
+    fclose(f);
+    return read == 1;
 }

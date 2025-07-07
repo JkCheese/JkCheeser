@@ -133,7 +133,8 @@ void init_position(Position* pos, const char* fen) {
     
     // Prepare FEN for parsing
     char fen_copy[128];
-    strncpy(fen_copy, fen, sizeof(fen_copy));
+    strncpy(fen_copy, fen, sizeof(fen_copy) - 1);
+    fen_copy[sizeof(fen_copy) - 1] = '\0';
     char* token = strtok(fen_copy, " "); // Split by space
 
     // Setting up the pieces
@@ -213,7 +214,6 @@ void init_position(Position* pos, const char* fen) {
 }
 
 void print_moves(const Position* pos, const MoveList* list, const MagicData* magic) {
-    int side = pos->side_to_move;
     static const char* flag_names[] = {
         "QUIET", "CAPTURE", "DOUBLE_PUSH", "EN_PASSANT",
         "CASTLE_QUEENSIDE", "CASTLE_KINGSIDE",

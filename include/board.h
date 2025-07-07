@@ -47,12 +47,12 @@ typedef enum {
 } Color;
 
 typedef enum {
-    P, N, B, R, Q, K
+    P, N, B, R, Q, K, EMPTY
 } PieceType;
 
 typedef enum {
     WP, WN, WB, WR, WQ, WK,
-    BP, BN, BB, BR, BQ, BK
+    BP, BN, BB, BR, BQ, BK,
 } ColoredPieceType;
 
 typedef enum {

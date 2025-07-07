@@ -255,7 +255,6 @@ int count_bits(Bitboard b) {
 // Given index and mask, return blocker permutation
 Bitboard set_blockers_from_index(uint64_t index, Bitboard mask) {
     Bitboard blockers = 0ULL;
-    int bits = count_bits(mask);
     int i = 0;
     for (int sq = 0; sq < 64; sq++) {
         if (mask & (1ULL << sq)) {

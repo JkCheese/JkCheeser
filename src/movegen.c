@@ -419,6 +419,33 @@ int unmake_move(Position* pos, const MoveState* state) {
     return 1;
 }
 
+int is_legal_move(Position* pos, int move, int side, const MagicData* magic) {
+    if (!pos || move == 0) return 0;
+
+    // If the king is the piece moving, we need to track its new square
+    int from = (move >> 6) & 0x3F;
+    int to = move & 0x3F;
+    int moved_piece = get_piece_on_square(pos, from);
+
+    // Create a shallow copy of the Position struct
+    Position temp = *pos;
+    MoveState state;
+    memcpy(&temp, pos, sizeof(Position));
+    if (!make_move(&temp, &state, move)) {
+        return 0; // illegal move due to malformed input
+    }
+
+    // printf("[DEBUG] After move %d:\n", move);
+    // print_position(&temp);
+
+    // After move, is king in check? make_move() only switches the side to move in the temp position, so we don't have to switch back
+    int in_check = is_in_check(&temp, temp.side_to_move ^ 1, magic);
+    // move_to_string(move);
+    // printf("Still in check? %d\n", in_check);
+
+    return !in_check;
+}
+
 void generate_legal_moves(const Position* pos, MoveList* list, int side, const MagicData* magic) {
     if (!pos || !list) return;
 
@@ -435,7 +462,7 @@ void generate_legal_moves(const Position* pos, MoveList* list, int side, const M
 
         // printf("Checking move from %d to %d\n", from, to);
 
-        if (is_legal_move(pos, move, magic)) {
+        if (is_legal_move(pos, move, side, magic)) {
             list->moves[list->count++] = move;
             // printf("[generate_legal_moves] Legal move: %d\n", move);
             // printf("Legal move added\n");

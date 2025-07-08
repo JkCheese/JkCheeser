@@ -4,8 +4,9 @@
 #include "board.h"
 #include "movegen.h"
 #include "magic.h"
+#include "zobrist.h"
 
 void move_to_uci(int move, char out[6]);
-int parse_move(const Position* pos, const char* uci_str, const MagicData* magic);
+int parse_move(const Position* pos, const char* uci_str, const MagicData* magic, const ZobristKeys* keys);
 
 #endif

@@ -1,11 +1,12 @@
 #include "board.h"
 #include "movegen.h"
 #include "magic.h"
+#include "zobrist.h"
 
 void move_to_uci(int move, char out[6]) {
-    int from = (move >> 6) & 0x3F;
-    int to = move & 0x3F;
-    int flag = (move >> 12) & 0xF;
+    int from = MOVE_FROM(move);
+    int to = MOVE_TO(move);
+    int flag = MOVE_FLAG(move);
 
     char files[] = "abcdefgh";
     char ranks[] = "12345678";
@@ -25,9 +26,9 @@ void move_to_uci(int move, char out[6]) {
     }
 }
 
-int parse_move(const Position* pos, const char* uci_str, const MagicData* magic) {
+int parse_move(const Position* pos, const char* uci_str, const MagicData* magic, const ZobristKeys* keys) {
     MoveList list;
-    generate_legal_moves(pos, &list, pos->side_to_move, magic);
+    generate_legal_moves(pos, &list, pos->side_to_move, magic, keys);
 
     for (int i = 0; i < list.count; ++i) {
         char move_str[6];

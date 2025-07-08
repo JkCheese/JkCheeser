@@ -1,5 +1,5 @@
 #include "board.h"
-#include "eval.h"
+#include "evalsearch.h"
 #include "engine.h"
 #include "magic.h"
 #include "moveformat.h"
@@ -18,7 +18,7 @@
 
 #define STARTPOS_FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
-int depth = 1;
+int depth = 6;
 
 int main() {
     char line[512];
@@ -28,7 +28,13 @@ int main() {
         return 1;
     }
 
-    init_engine(magic);
+    ZobristKeys* keys = malloc(sizeof(ZobristKeys));
+    if (!keys) {
+        fprintf(stderr, "Failed to allocate ZobristKeys\n");
+        return 1;
+    }
+
+    init_engine(magic, keys);
     Position pos;
     MoveState state;
     MoveList list;
@@ -59,6 +65,11 @@ int main() {
                 char fen[256] = {0};
                 sscanf(ptr, "%255[^\n]", fen);
                 init_position(&pos, fen);
+                generate_legal_moves(&pos, &list, pos.side_to_move, magic, keys);
+                print_moves(&pos, &list, magic, keys);
+                perft_debug(&pos, depth, magic, keys);
+                // Initialize Zobrist hashing
+                pos.zobrist_hash = compute_zobrist_hash(&pos, keys);
                 ptr += strlen(fen);
             }
 
@@ -68,9 +79,9 @@ int main() {
                 moves += 6;
                 char move_str[8];
                 while (sscanf(moves, "%7s", move_str) == 1) {
-                    int move = parse_move(&pos, move_str, magic);
+                    int move = parse_move(&pos, move_str, magic, keys);
                     if (move) {
-                        if (!make_move(&pos, &state, move)) {
+                        if (!make_move(&pos, &state, move, keys)) {
                             fprintf(stderr, "Illegal move in move list: %s\n", move_str);
                             break;
                         }
@@ -80,12 +91,16 @@ int main() {
                 }
             }
         } else if (strncmp(line, "go", 2) == 0) {
-            generate_legal_moves(&pos, &list, pos.side_to_move, magic);
+            generate_legal_moves(&pos, &list, pos.side_to_move, magic, keys);
             if (list.count > 0) {
-                int move = list.moves[0];
-                char bestmove[6];
-                move_to_uci(move, bestmove);
-                printf("bestmove %s\n", bestmove);
+                int move = find_best_move(&pos, depth, magic, keys);  // or depth 4 if fast enough;
+                if (move == 0) {
+                    printf("bestmove 0000\n");  // Null move (no legal moves, e.g., checkmate or stalemate)
+                } else {
+                    char bestmove[6];
+                    move_to_uci(move, bestmove);
+                    printf("bestmove %s\n", bestmove);
+                }
             }
             fflush(stdout);
         } else if (strncmp(line, "quit", 4) == 0) {
@@ -94,5 +109,6 @@ int main() {
     }
 
     free(magic);
+    free(keys);
     return 0;
 }

@@ -39,6 +39,7 @@ void move_to_san(const Position* pos, int move, char* san, const MagicData* magi
     int to = MOVE_TO(move);
     int flag = MOVE_FLAG(move);
 
+    int side = pos->side_to_move;
     int piece_type = -1;
     for (int p = 0; p < 12; ++p) {
         if ((pos->pieces[p] >> from) & 1ULL) {

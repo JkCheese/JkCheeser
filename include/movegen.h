@@ -3,11 +3,9 @@
 
 #include "board.h"
 #include "magic.h"
-#include "moveformat.h"
 #include "operations.h"
 #include "zobrist.h"
 #include <stdbool.h>
-#include <string.h>
 
 #define BOARD_SIZE 64
 #define MAX_MOVES 1024

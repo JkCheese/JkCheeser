@@ -4,15 +4,11 @@ CFLAGS = -Wall -Wextra -std=c11 -Iinclude -O3 -march=native
 SRC = \
 	src/board.c \
 	src/engine.c \
-	src/evalsearch.c \
 	src/moveformat.c \
 	src/movegen.c \
 	src/magic.c \
 	src/main.c \
-	src/test.c \
-	src/tt.c \
-	src/uci.c \
-	src/zobrist.c
+	src/test.c
 
 OBJ = $(SRC:.c=.o)
 BIN = engine2

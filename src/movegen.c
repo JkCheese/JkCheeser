@@ -3,7 +3,6 @@
 #include "moveformat.h"
 #include "movegen.h"
 #include "operations.h"
-#include "zobrist.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -145,31 +144,31 @@ int is_in_check(const Position* pos, int side, const MagicData* magic) {
 }
 
 // Is the given side in checkmate?
-int is_in_checkmate(const Position* pos, int side, const MagicData* magic, const ZobristKeys* keys) {
+int is_in_checkmate(const Position* pos, int side, const MagicData* magic) {
 
     // Check if the given side is in check: if not, they can't be in checkmate either
     if (!is_in_check(pos, side, magic)) return 0;
 
     // Generate all legal moves and return whether there are none
     MoveList legal;
-    generate_legal_moves(pos, &legal, side, magic, keys);
+    generate_legal_moves(pos, &legal, side, magic);
     return legal.count == 0;
 }
 
 // Is the given side in stalemate?
-int is_in_stalemate(const Position* pos, int side, const MagicData* magic, const ZobristKeys* keys) {
+int is_in_stalemate(const Position* pos, int side, const MagicData* magic) {
 
     // Check if the given side is in check: if yes, they can't be in stalemate
     if (is_in_check(pos, side, magic)) return 0;
 
     // Generate all legal moves and return whether there are none
     MoveList legal;
-    generate_legal_moves(pos, &legal, side, magic, keys);
+    generate_legal_moves(pos, &legal, side, magic);
     return legal.count == 0;
 }
 
 // Function to make a move
-int make_move(Position* pos, MoveState* state, int move, ZobristKeys* keys) {
+int make_move(Position* pos, MoveState* state, int move) {
 
     // If either the position or state pointers point to nothing, or the encoded move has no value, don't make the move
     if (!pos || !state || move == 0) {
@@ -225,8 +224,7 @@ int make_move(Position* pos, MoveState* state, int move, ZobristKeys* keys) {
 
     // Reset en passant square
     if (pos->en_passant != -1)
-        pos->zobrist_hash ^= keys->zobrist_en_passant[pos->en_passant % 8];
-    pos->en_passant = -1;
+        pos->en_passant = -1;
 
     // For 50-move-rule: if a piece was captured or a pawn was moved, reset the halfmove clock
     if (captured_piece != -1 || (moved_piece & 7) == P)
@@ -240,7 +238,6 @@ int make_move(Position* pos, MoveState* state, int move, ZobristKeys* keys) {
         pos->fullmove_number++;
 
     // Remove the moved piece
-    pos->zobrist_hash ^= keys->zobrist_pieces[moved_piece][from];
     pos->pieces[moved_piece] &= ~from_bb;
     pos->occupied[side] &= ~from_bb;
 
@@ -251,11 +248,9 @@ int make_move(Position* pos, MoveState* state, int move, ZobristKeys* keys) {
     } else if (flag == EN_PASSANT && captured_piece != -1) {
         int cap_sq = (side == WHITE) ? to - 8 : to + 8;
         Bitboard cap_bb = 1ULL << cap_sq;
-        pos->zobrist_hash ^= keys->zobrist_pieces[captured_piece][cap_sq];
         pos->pieces[captured_piece] &= ~cap_bb;
         pos->occupied[!side] &= ~cap_bb;
     } else if (captured_piece != -1) {
-        pos->zobrist_hash ^= keys->zobrist_pieces[captured_piece][to];
         pos->pieces[captured_piece] &= ~to_bb;
         pos->occupied[!side] &= ~to_bb;
     }
@@ -269,13 +264,11 @@ int make_move(Position* pos, MoveState* state, int move, ZobristKeys* keys) {
                             : flag - PROMOTE_N;
 
         promoted_piece = (side == WHITE ? WN : BN) + promote_index;
-        pos->zobrist_hash ^= keys->zobrist_pieces[promoted_piece][to];
         pos->pieces[promoted_piece] |= to_bb;
         pos->occupied[side] |= to_bb;
         state->promoted_piece = promoted_piece;
 
     } else {
-        pos->zobrist_hash ^= keys->zobrist_pieces[moved_piece][to];
         pos->pieces[moved_piece] |= to_bb;
         pos->occupied[side] |= to_bb;
     }
@@ -289,11 +282,6 @@ int make_move(Position* pos, MoveState* state, int move, ZobristKeys* keys) {
         int rook_to = pos->rook_to[index];
         Bitboard rf_bb = 1ULL << rook_from;
         Bitboard rt_bb = 1ULL << rook_to;
-
-        // XOR rook out at from
-        pos->zobrist_hash ^= keys->zobrist_pieces[rook][rook_from];
-        // XOR rook in at to
-        pos->zobrist_hash ^= keys->zobrist_pieces[rook][rook_to];
 
         pos->pieces[rook] &= ~rf_bb;
         pos->pieces[rook] |= rt_bb;
@@ -333,25 +321,18 @@ int make_move(Position* pos, MoveState* state, int move, ZobristKeys* keys) {
         pos->castling_rights &= ~(BLACK_KINGSIDE | BLACK_QUEENSIDE);
     }
 
-    if (pos->castling_rights != state->castling_rights) {
-        pos->zobrist_hash ^= keys->zobrist_castling[state->castling_rights];
-        pos->zobrist_hash ^= keys->zobrist_castling[pos->castling_rights];
-    }
-
     // Update occupied and side
     pos->occupied[ALL] = pos->occupied[WHITE] | pos->occupied[BLACK];
-    pos->zobrist_hash ^= keys->zobrist_side;
     pos->side_to_move = side ^ 1;
 
     // Double pawn push: set en passant square
     if (flag == DOUBLE_PUSH) {
         pos->en_passant = (side == WHITE) ? to - 8 : to + 8;
-        pos->zobrist_hash ^= keys->zobrist_en_passant[pos->en_passant % 8];
     }
     return 1;
 }
 
-int unmake_move(Position* pos, const MoveState* state, ZobristKeys* keys) {
+int unmake_move(Position* pos, const MoveState* state) {
     if (!pos || !state) return 0;
 
     int from = state->from;
@@ -371,28 +352,16 @@ int unmake_move(Position* pos, const MoveState* state, ZobristKeys* keys) {
     int captured_piece = state->captured_piece;
     int promoted_piece = state->promoted_piece;
 
-    pos->zobrist_hash ^= keys->zobrist_side;
-
-    if (pos->en_passant != -1)
-        pos->zobrist_hash ^= keys->zobrist_en_passant[pos->en_passant % 8];
-
     pos->side_to_move = side;
     pos->en_passant = state->en_passant;
     pos->castling_rights = state->castling_rights;
     pos->halfmove_clock = state->halfmove_clock;
     pos->fullmove_number = state->fullmove_number;
 
-    if (pos->en_passant != -1)
-        pos->zobrist_hash ^= keys->zobrist_en_passant[pos->en_passant % 8];
-
-    pos->zobrist_hash ^= keys->zobrist_castling[pos->castling_rights];
-
     // Remove piece from destination
     if (promoted_piece != -1) {
-        pos->zobrist_hash ^= keys->zobrist_pieces[promoted_piece][to];
         pos->pieces[promoted_piece] &= ~to_bb;
     } else {
-        pos->zobrist_hash ^= keys->zobrist_pieces[moved_piece][to];
         pos->pieces[moved_piece] &= ~to_bb;
     }
     pos->occupied[side] &= ~to_bb;
@@ -400,8 +369,6 @@ int unmake_move(Position* pos, const MoveState* state, ZobristKeys* keys) {
     // Restore piece to source
     pos->pieces[moved_piece] |= from_bb;
     pos->occupied[side] |= from_bb;
-
-    pos->zobrist_hash ^= keys->zobrist_pieces[moved_piece][from];
 
     // Restore king square
     pos->king_from[WHITE] = state->king_sq[WHITE];
@@ -414,11 +381,9 @@ int unmake_move(Position* pos, const MoveState* state, ZobristKeys* keys) {
         Bitboard cap_bb = 1ULL << cap_sq;
         pos->pieces[captured_piece] |= cap_bb;
         pos->occupied[!side] |= cap_bb;
-        pos->zobrist_hash ^= keys->zobrist_pieces[captured_piece][cap_sq];
     } else if (captured_piece != -1) {
         pos->pieces[captured_piece] |= to_bb;
         pos->occupied[!side] |= to_bb;
-        pos->zobrist_hash ^= keys->zobrist_pieces[captured_piece][to];
     }
 
     // Undo castling
@@ -432,11 +397,6 @@ int unmake_move(Position* pos, const MoveState* state, ZobristKeys* keys) {
 
         Bitboard rf_bb = 1ULL << rook_from;
         Bitboard rt_bb = 1ULL << rook_to;
-
-        // XOR rook back out from moved-to square
-        pos->zobrist_hash ^= keys->zobrist_pieces[rook][rook_to];
-        // XOR rook back in at original square
-        pos->zobrist_hash ^= keys->zobrist_pieces[rook][rook_from];
 
         // Move rook back
         pos->pieces[rook] &= ~rt_bb;
@@ -459,7 +419,7 @@ int unmake_move(Position* pos, const MoveState* state, ZobristKeys* keys) {
     return 1;
 }
 
-void generate_legal_moves(const Position* pos, MoveList* list, int side, const MagicData* magic, const ZobristKeys* keys) {
+void generate_legal_moves(const Position* pos, MoveList* list, int side, const MagicData* magic) {
     if (!pos || !list) return;
 
     MoveList pseudo;
@@ -475,7 +435,7 @@ void generate_legal_moves(const Position* pos, MoveList* list, int side, const M
 
         // printf("Checking move from %d to %d\n", from, to);
 
-        if (is_legal_move(pos, move, magic, keys)) {
+        if (is_legal_move(pos, move, magic)) {
             list->moves[list->count++] = move;
             // printf("[generate_legal_moves] Legal move: %d\n", move);
             // printf("Legal move added\n");

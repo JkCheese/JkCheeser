@@ -4,7 +4,6 @@
 #include "board.h"
 #include "magic.h"
 #include "operations.h"
-#include "zobrist.h"
 #include <stdbool.h>
 
 #define BOARD_SIZE 64
@@ -67,7 +66,7 @@ static inline int get_piece_on_square(const Position* pos, int sq) {
     // Return -1 if no piece is found
     return -1;
 }
-void print_moves(const Position* pos, const MoveList* list, const MagicData* magic, ZobristKeys* keys);
+void print_moves(const Position* pos, const MoveList* list, const MagicData* magic);
 
 /* ---------- Attack lookup functions ---------- */
 
@@ -708,23 +707,23 @@ static inline void generate_king_moves(const Position* pos, MoveList* list, int 
 
 // Check, checkmate, and stalemate detection
 int is_in_check(const Position* pos, int side, const MagicData* magic);
-int is_in_checkmate(const Position* pos, int side, const MagicData* magic, const ZobristKeys* keys);
-int is_in_stalemate(const Position* pos, int side, const MagicData* magic, const ZobristKeys* keys);
+int is_in_checkmate(const Position* pos, int side, const MagicData* magic);
+int is_in_stalemate(const Position* pos, int side, const MagicData* magic);
 
 // Make and unmake move
-int make_move(Position* pos, MoveState* state, int move, ZobristKeys* keys);
-int unmake_move(Position* pos, const MoveState* state, ZobristKeys* keys);
+int make_move(Position* pos, MoveState* state, int move);
+int unmake_move(Position* pos, const MoveState* state);
 
 /* ---------- Move generation functions ---------- */
 
-static inline int is_legal_move(const Position* pos, int move, const MagicData* magic, ZobristKeys* keys) {
+static inline int is_legal_move(const Position* pos, int move, const MagicData* magic) {
     if (!pos || move == 0) return 0;
 
     // Create a shallow copy of the Position struct
     Position temp = *pos;
     MoveState state;
     memcpy(&temp, pos, sizeof(Position));
-    if (!make_move(&temp, &state, move, keys)) {
+    if (!make_move(&temp, &state, move)) {
         return 0; // illegal move due to malformed input
     }
 
@@ -753,6 +752,6 @@ static inline void generate_pseudo_legal_moves(const Position* pos, MoveList* li
     generate_king_moves(pos, list, side, magic);
 }
 
-void generate_legal_moves(const Position* pos, MoveList* list, int side, const MagicData* magic, const ZobristKeys* keys);
+void generate_legal_moves(const Position* pos, MoveList* list, int side, const MagicData* magic);
 
 #endif

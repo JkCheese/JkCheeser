@@ -8,7 +8,8 @@ SRC = \
 	src/movegen.c \
 	src/magic.c \
 	src/main.c \
-	src/test.c
+	src/test.c \
+	src/uci.c
 
 OBJ = $(SRC:.c=.o)
 BIN = engine2

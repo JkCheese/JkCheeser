@@ -66,7 +66,6 @@ uint64_t perft_debug(Position* pos, int depth, const MagicData* magic) {
 
         // Immediately check if king is in check for side that just moved (illegal if so)
         int moved_side = state.side_to_move;
-        int opponent = moved_side ^ 1;
         if (is_in_check(pos, moved_side, magic)) {
             char san[16];
             move_to_san(&pos_before, move, san, magic);

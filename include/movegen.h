@@ -579,7 +579,6 @@ static inline void generate_king_moves(const Position* pos, MoveList* list, int 
             if (!(pos->castling_rights & castling_rights)) continue;
 
             int rook_from = pos->rook_from[rook_index];
-            int rook_to = pos->rook_to[rook_index];
 
             Bitboard rook_bb = 1ULL << rook_from;
             Bitboard rook_piece_bb = pos->pieces[side == WHITE ? WR : BR];
@@ -623,7 +622,7 @@ int make_move(Position* pos, MoveState* state, int move);
 int unmake_move(Position* pos, const MoveState* state);
 
 // Legal move generation
-static inline int is_legal_move(Position* pos, int move, int side, const MagicData* magic) {
+static inline int is_legal_move(Position* pos, int move, const MagicData* magic) {
     if (!pos || move == 0) return 0;
 
     // Create a shallow copy of the Position struct

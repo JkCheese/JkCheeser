@@ -422,7 +422,7 @@ void generate_legal_moves(const Position* pos, MoveList* list, int side, const M
 
         // printf("Checking move from %d to %d\n", from, to);
 
-        if (is_legal_move(pos, move, side, magic)) {
+        if (is_legal_move(pos, move, magic)) {
             list->moves[list->count++] = move;
             // printf("[generate_legal_moves] Legal move: %d\n", move);
             // printf("Legal move added\n");

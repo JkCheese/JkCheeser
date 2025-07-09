@@ -5,6 +5,7 @@
 #include "movegen.h"
 #include "operations.h"
 #include "test.h"
+#include "uci.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -17,56 +18,16 @@
 int depth = 1;
 
 int main() {
-    printf("Program started.\n");
-    printf("Initializing variables...\n");
     Position pos;
-    MoveList list;
-    MagicData* magic = malloc(sizeof(MagicData)); // Allocate on heap
+    MagicData* magic = malloc(sizeof(MagicData));
     if (!magic) {
-        printf("Failed to allocate MagicData\n");
+        fprintf(stderr, "Failed to allocate MagicData\n");
         return 1;
     }
-    const char* fen = "r3k2r/p2p1p1p/P2P1P1P/8/8/p2p1p1p/P2P1P1P/R3K2R w KQkq - 0 1";
 
-    printf("Variables initialized.\n");
-    
-    printf("Initializing engine...");
     init_engine(magic);
-    printf("Engine initialized.\n");
-    
-    printf("Parsing FEN...\n");
-    init_position(&pos, fen);
-
-    printf("rook_from[%d] = %d, rook_to[%d] = %d\n",
-        WHITE_QUEENSIDE_ROOK, pos.rook_from[WHITE_QUEENSIDE_ROOK],
-        WHITE_QUEENSIDE_ROOK, pos.rook_to[WHITE_QUEENSIDE_ROOK]);
-
-    printf("rook_from[%d] = %d, rook_to[%d] = %d\n",
-        WHITE_KINGSIDE_ROOK, pos.rook_from[WHITE_KINGSIDE_ROOK],
-        WHITE_KINGSIDE_ROOK, pos.rook_to[WHITE_KINGSIDE_ROOK]);
-        
-    printf("rook_from[%d] = %d, rook_to[%d] = %d\n",
-        BLACK_QUEENSIDE_ROOK, pos.rook_from[BLACK_QUEENSIDE_ROOK],
-        BLACK_QUEENSIDE_ROOK, pos.rook_to[BLACK_QUEENSIDE_ROOK]);
-                        
-    printf("rook_from[%d] = %d, rook_to[%d] = %d\n",
-        BLACK_KINGSIDE_ROOK, pos.rook_from[BLACK_KINGSIDE_ROOK],
-        BLACK_KINGSIDE_ROOK, pos.rook_to[BLACK_KINGSIDE_ROOK]);
-    
-    printf("Printing board...\n");
-    print_board(&pos);
-
-    printf("Generating moves...\n");
-    generate_legal_moves(&pos, &list, pos.side_to_move, magic);
-    print_moves(&pos, &list, magic);
-    printf("Move generation done.\n");
-
-    printf("Running perft divide (depth = %d)...\n", depth);
-    perft_divide(&pos, depth, magic);
-
-    printf("Running perft total (depth = %d)...\n", depth);
-    uint64_t total_nodes = perft_debug(&pos, depth, magic);
-    printf("Total nodes: %llu\n", total_nodes);
+    init_position(&pos, STARTPOS_FEN);
+    uci_loop(&pos, magic);
 
     free(magic);
     return 0;

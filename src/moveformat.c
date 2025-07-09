@@ -2,7 +2,6 @@
 #include "magic.h"
 #include "moveformat.h"
 #include "movegen.h"
-#include "zobrist.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -34,7 +33,7 @@ int encode_move(int from_sq, int to_sq, int move_flag) {
     return (move_flag << 12) | (from_sq << 6) | to_sq ;
 }
 
-void move_to_san(const Position* pos, int move, char* san, const MagicData* magic, ZobristKeys* keys) {
+void move_to_san(const Position* pos, int move, char* san, const MagicData* magic) {
     int from = MOVE_FROM(move);
     int to = MOVE_TO(move);
     int flag = MOVE_FLAG(move);
@@ -90,10 +89,10 @@ void move_to_san(const Position* pos, int move, char* san, const MagicData* magi
 
     Position temp = *pos;
     MoveState state;
-    make_move(&temp, &state, move, keys);
+    make_move(&temp, &state, move);
 
     int opponent = temp.side_to_move;
-    if (is_in_checkmate(&temp, opponent, magic, keys)) {
+    if (is_in_checkmate(&temp, opponent, magic)) {
         check_status[0] = '#';
         check_status[1] = 0;
     } else if (is_in_check(&temp, opponent, magic)) {
@@ -109,5 +108,5 @@ void move_to_san(const Position* pos, int move, char* san, const MagicData* magi
     else
         sprintf(san, "%s%s%s%s", disambig, to_str, promo, check_status);
 
-    unmake_move(&temp, &state, keys);
+    unmake_move(&temp, &state);
 }

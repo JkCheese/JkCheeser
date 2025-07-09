@@ -29,8 +29,6 @@ typedef struct {
     int en_passant; // square index for en passant (-1 if not applicable)
     int halfmove_clock; // number of halfmoves since last pawn move or capture
     int fullmove_number; // number of full moves (starts at 1)
-    bool has_castled;
-    uint64_t zobrist_hash;
 } Position;
 
 typedef enum {

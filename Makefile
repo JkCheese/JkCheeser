@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -Iinclude -O3 -march=native
+CFLAGS = -Wall -Wextra -std=c11 -Iinclude -O3 -march=native -pg
 
 SRC = \
 	src/board.c \

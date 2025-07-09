@@ -2,7 +2,6 @@
 #include "moveformat.h"
 #include "movegen.h"
 #include "operations.h"
-#include "zobrist.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -194,8 +193,6 @@ void init_position(Position* pos, const char* fen) {
     if (strchr(token, 'Q')) pos->castling_rights |= WHITE_QUEENSIDE;
     if (strchr(token, 'k')) pos->castling_rights |= BLACK_KINGSIDE;
     if (strchr(token, 'q')) pos->castling_rights |= BLACK_QUEENSIDE;
-    // printf("Castling rights: %d\n", pos->castling_rights);
-    pos->has_castled = false;
 
     // Parse en passant square
     token = strtok(NULL, " ");
@@ -230,7 +227,7 @@ void print_moves(const Position* pos, const MoveList* list, const MagicData* mag
         int move = list->moves[i];
         int flag = MOVE_FLAG(move);
 
-        move_to_san(pos, move, san, magic, keys);
+        move_to_san(pos, move, san, magic);
         const char* flag_str = (flag >= 0 && flag < 14) ? flag_names[flag] : "UNKNOWN";
 
         printf("Move %d: %s, Flag: %s\n", i + 1, san, flag_str);

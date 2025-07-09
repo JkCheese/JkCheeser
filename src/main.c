@@ -14,7 +14,7 @@
 // Example FEN (checkmate test): 2n1nkn1/1NBPpQpP/8/pP2N1Pp/1P6/2b1r3/3N4/R3K2R b KQ - 0 2
 // Example 960 FEN (for castling test): 1k5r/rpp4p/p1np4/8/3B4/2NQ2P1/PPP2P1P/RK3B1R b KQk - 15 21
 
-int depth = 6;
+int depth = 1;
 
 int main() {
     printf("Program started.\n");
@@ -26,7 +26,7 @@ int main() {
         printf("Failed to allocate MagicData\n");
         return 1;
     }
-    const char* fen = "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8";
+    const char* fen = "r3k2r/p2p1p1p/P2P1P1P/8/8/p2p1p1p/P2P1P1P/R3K2R w KQkq - 0 1";
 
     printf("Variables initialized.\n");
     
@@ -69,6 +69,5 @@ int main() {
     printf("Total nodes: %llu\n", total_nodes);
 
     free(magic);
-    free(keys);
     return 0;
 }

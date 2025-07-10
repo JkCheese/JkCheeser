@@ -2,7 +2,6 @@
 #define ZOBRIST_H
 
 #include "board.h"
-#include "tt.h"
 #include <stdint.h>
 
 #define Bitboard uint64_t

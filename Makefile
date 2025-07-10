@@ -15,7 +15,7 @@ SRC = \
 	src/zobrist.c
 
 OBJ = $(SRC:.c=.o)
-BIN = engine2
+BIN = v5-3fold
 
 all: $(BIN)
 

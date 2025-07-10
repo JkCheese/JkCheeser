@@ -241,6 +241,53 @@ static inline int is_square_attacked(const Position* pos, int sq, int attacking_
     return 0;
 }
 
+static inline Bitboard get_attackers_to(const Position* pos, int sq, Bitboard occ, const MagicData* magic) {
+    if (!pos || sq < 0 || sq >= 64) return 0ULL;
+
+    Bitboard attackers = 0ULL;
+    Bitboard sq_bb = 1ULL << sq;
+
+    /* ---------- Pawn attackers ---------- */
+    if (sq >= 0 && sq < 64) {
+        // White pawns attack like black
+        Bitboard white_pawn_attackers =
+            ((sq_bb & ~FILE_X(8)) >> 7) |
+            ((sq_bb & ~FILE_X(1)) >> 9);
+
+        // Black pawns attack like white
+        Bitboard black_pawn_attackers =
+            ((sq_bb & ~FILE_X(1)) << 7) |
+            ((sq_bb & ~FILE_X(8)) << 9);
+
+        attackers |= pos->pieces[WP] & white_pawn_attackers;
+        attackers |= pos->pieces[BP] & black_pawn_attackers;
+    }
+
+    /* ---------- Knight attackers ---------- */
+    Bitboard knight_mask = knight_attacks(sq);
+    attackers |= pos->pieces[WN] & knight_mask;
+    attackers |= pos->pieces[BN] & knight_mask;
+
+    /* ---------- Bishop/Queen diagonal attackers ---------- */
+    Bitboard bishop_mask = bishop_attacks(sq, occ, magic);
+    Bitboard diag_sliders = (pos->pieces[WB] | pos->pieces[BB] |
+                             pos->pieces[WQ] | pos->pieces[BQ]);
+    attackers |= diag_sliders & bishop_mask;
+
+    /* ---------- Rook/Queen orthogonal attackers ---------- */
+    Bitboard rook_mask = rook_attacks(sq, occ, magic);
+    Bitboard ortho_sliders = (pos->pieces[WR] | pos->pieces[BR] |
+                              pos->pieces[WQ] | pos->pieces[BQ]);
+    attackers |= ortho_sliders & rook_mask;
+
+    /* ---------- King attackers ---------- */
+    Bitboard king_mask = king_attacks(sq);
+    attackers |= pos->pieces[WK] & king_mask;
+    attackers |= pos->pieces[BK] & king_mask;
+
+    return attackers;
+}
+
 /* ---------- Individual piece move generation functions ---------- */ 
 
 // Function to generate moves for all pawns on the bitboard

@@ -14,14 +14,14 @@ bool is_position_valid(const Position* pos) {
     return true;
 }
 
-uint64_t perft_debug(Position* pos, int depth, const MagicData* magic, const ZobristKeys* keys) {
+uint64_t perft_debug(Position* pos, int depth, const MagicData* magic) {
     if (depth == 0) return 1;
 
     // printf("[DEBUG] Before move - Occupied bitboard:\n");
     // print_bitboard(pos->occupied[ALL]);
 
     MoveList list;
-    generate_legal_moves(pos, &list, pos->side_to_move, magic, keys);
+    generate_legal_moves(pos, &list, pos->side_to_move, magic);
 
     uint64_t nodes = 0;
 
@@ -32,61 +32,61 @@ uint64_t perft_debug(Position* pos, int depth, const MagicData* magic, const Zob
         // Before making move, save copy of position for comparison later
         Position pos_before = *pos;
 
-        if (!make_move(pos, &state, move, keys)) {
+        if (!make_move(pos, &state, move)) {
             printf("[DEBUG] make_move failed for move %d\n", move);
             continue;
         }
 
-        printf("[DEBUG] After move %d - Occupied bitboard:\n", i + 1);
-        print_bitboard(pos->occupied[ALL]);
-        print_bitboard(pos->pieces[WP]);
-        print_bitboard(pos->pieces[WN]);
-        print_bitboard(pos->pieces[WB]);
-        print_bitboard(pos->pieces[WR]);
-        print_bitboard(pos->pieces[WQ]);
-        print_bitboard(pos->pieces[WK]);
-        print_bitboard(pos->pieces[BP]);
-        print_bitboard(pos->pieces[BN]);
-        print_bitboard(pos->pieces[BB]);
-        print_bitboard(pos->pieces[BR]);
-        print_bitboard(pos->pieces[BQ]);
-        print_bitboard(pos->pieces[BK]);
-        printf("[DEBUG] After move - WQ rook position:\n");
-        Bitboard rook_to_WQ = 1ULL << pos->rook_from[0];
-        print_bitboard(rook_to_WQ);
-        printf("[DEBUG] After move - WK rook position:\n");
-        Bitboard rook_to_WK = 1ULL << pos->rook_from[1];
-        print_bitboard(rook_to_WK);
-        printf("[DEBUG] After move - BQ rook position:\n");
-        Bitboard rook_to_BQ = 1ULL << pos->rook_from[2];
-        print_bitboard(rook_to_BQ);
-        printf("[DEBUG] After move - BK rook position:\n");
-        Bitboard rook_to_BK = 1ULL << pos->rook_from[3];
-        print_bitboard(rook_to_BK);
+        // printf("[DEBUG] After move %d - Occupied bitboard:\n", i + 1);
+        // print_bitboard(pos->occupied[ALL]);
+        // print_bitboard(pos->pieces[WP]);
+        // print_bitboard(pos->pieces[WN]);
+        // print_bitboard(pos->pieces[WB]);
+        // print_bitboard(pos->pieces[WR]);
+        // print_bitboard(pos->pieces[WQ]);
+        // print_bitboard(pos->pieces[WK]);
+        // print_bitboard(pos->pieces[BP]);
+        // print_bitboard(pos->pieces[BN]);
+        // print_bitboard(pos->pieces[BB]);
+        // print_bitboard(pos->pieces[BR]);
+        // print_bitboard(pos->pieces[BQ]);
+        // print_bitboard(pos->pieces[BK]);
+        // printf("[DEBUG] After move - WQ rook position:\n");
+        // Bitboard rook_to_WQ = 1ULL << pos->rook_from[0];
+        // print_bitboard(rook_to_WQ);
+        // printf("[DEBUG] After move - WK rook position:\n");
+        // Bitboard rook_to_WK = 1ULL << pos->rook_from[1];
+        // print_bitboard(rook_to_WK);
+        // printf("[DEBUG] After move - BQ rook position:\n");
+        // Bitboard rook_to_BQ = 1ULL << pos->rook_from[2];
+        // print_bitboard(rook_to_BQ);
+        // printf("[DEBUG] After move - BK rook position:\n");
+        // Bitboard rook_to_BK = 1ULL << pos->rook_from[3];
+        // print_bitboard(rook_to_BK);
 
         // Immediately check if king is in check for side that just moved (illegal if so)
         int moved_side = state.side_to_move;
         if (is_in_check(pos, moved_side, magic)) {
             char san[16];
-            move_to_san(&pos_before, move, san, magic, keys);
+            move_to_san(&pos_before, move, san, magic);
             printf("[ILLEGAL MOVE DETECTED] Move %s leaves king in check at depth %d\n", san, depth);
-            unmake_move(pos, &state, keys);
+            unmake_move(pos, &state);
             continue;
         }
 
         // Check if position still valid (optional)
         if (!is_position_valid(pos)) {
             char san[16];
-            move_to_san(&pos_before, move, san, magic, keys);
+            move_to_san(&pos_before, move, san, magic);
             printf("[INVALID POSITION] after move %s at depth %d\n", san, depth);
-            unmake_move(pos, &state, keys);
+            unmake_move(pos, &state);
             continue;
         }
 
-        nodes += perft_debug(pos, depth - 1, magic, keys);
+        nodes += perft_debug(pos, depth - 1, magic);
         
         // Undo move
-        if (!unmake_move(pos, &state, keys)) {
+        if (!unmake_move(pos, &state)) {
             printf("[DEBUG] unmake_move failed after move %d\n", move);
             // Could be serious bug - stop or break here if you want
         }
@@ -98,9 +98,9 @@ uint64_t perft_debug(Position* pos, int depth, const MagicData* magic, const Zob
     return nodes;
 }
 
-void perft_divide(Position* pos, int depth, const MagicData* magic, const ZobristKeys* keys) {
+void perft_divide(Position* pos, int depth, const MagicData* magic) {
     MoveList list;
-    generate_legal_moves(pos, &list, pos->side_to_move, magic, keys);
+    generate_legal_moves(pos, &list, pos->side_to_move, magic);
 
     uint64_t total = 0;
 
@@ -111,7 +111,7 @@ void perft_divide(Position* pos, int depth, const MagicData* magic, const Zobris
         int flag = MOVE_FLAG(move);
 
         MoveState state;
-        if (!make_move(pos, &state, move, keys))
+        if (!make_move(pos, &state, move))
             continue;
 
         char from_str[3], to_str[3], uci_move[6];  // +1 for null terminator
@@ -137,12 +137,12 @@ void perft_divide(Position* pos, int depth, const MagicData* magic, const Zobris
             snprintf(uci_move, sizeof(uci_move), "%s%s", from_str, to_str);
         }
 
-        uint64_t count = perft_debug(pos, depth - 1, magic, keys);
+        uint64_t count = perft_debug(pos, depth - 1, magic);
         total += count;
 
         printf("%s: %llu\n", uci_move, count);
 
-        unmake_move(pos, &state, keys);
+        unmake_move(pos, &state);
     }
 
     printf("Total: %llu\n", total);

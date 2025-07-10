@@ -7,7 +7,7 @@
 
 void move_to_uci(int move, char out[6]) {
     int from = MOVE_FROM(move);
-    int to = MOVE_TO(move);
+    int to = MOVE_TO(move);;
     int flag = MOVE_FLAG(move);
 
     char files[] = "abcdefgh";
@@ -28,9 +28,9 @@ void move_to_uci(int move, char out[6]) {
     }
 }
 
-int parse_move(const Position* pos, const char* uci_str, const MagicData* magic, const ZobristKeys* keys) {
+int parse_move(const Position* pos, const char* uci_str, const MagicData* magic) {
     MoveList list;
-    generate_legal_moves(pos, &list, pos->side_to_move, magic, keys);
+    generate_legal_moves(pos, &list, pos->side_to_move, magic);
 
     for (int i = 0; i < list.count; ++i) {
         char move_str[6];

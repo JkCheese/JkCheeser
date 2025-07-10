@@ -5,7 +5,6 @@
 #include "magic.h"
 #include "moveformat.h"
 #include "operations.h"
-#include "zobrist.h"
 #include <stdbool.h>
 #include <string.h>
 
@@ -51,8 +50,9 @@ typedef struct {
     bool has_castled;
 } MoveState;
 
-/* ---------- General helper functions ---------- */
+int is_square_attacked(const Position* pos, int sq, int attacking_side, const MagicData* magic);
 
+// General helper functions
 // Function to get the piece on a given square
 static inline int get_piece_on_square(const Position* pos, int sq) {
     // Initialize a bitboard with a bit set at the given square to compare with all piece bitboards 
@@ -288,7 +288,7 @@ static inline Bitboard get_attackers_to(const Position* pos, int sq, Bitboard oc
     return attackers;
 }
 
-/* ---------- Individual piece move generation functions ---------- */ 
+/* ---------- Individual piece move generation functions ---------- */
 
 // Function to generate moves for all pawns on the bitboard
 static inline void generate_pawn_moves(const Position* pos, MoveList* list, int side) {
@@ -485,6 +485,30 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
     }
 }
 
+// Function to generate moves for any given knight on any given square on the bitboard
+static inline Bitboard knight_attacks(int sq) {
+
+    // Initialize the knight bitboard
+    Bitboard knight = 0;
+    // Set the knight to be on the given square
+    set_bit(knight, sq);
+    
+    // Precompute knight moves with file masks to prevent wrap-around (overflow automatically handled by bitwise operations)
+    Bitboard precomputed_knight_attacks = 0;
+
+    precomputed_knight_attacks |= (knight & ~FILE_X(8)) << 17; // +1 file, +2 ranks
+    precomputed_knight_attacks |= (knight & ~FILE_X(1)) << 15; // -1 file, +2 ranks
+    precomputed_knight_attacks |= (knight & ~(FILE_X(8) | FILE_X(7))) << 10; // +2 files, +1 rank
+    precomputed_knight_attacks |= (knight & ~(FILE_X(1) | FILE_X(2))) << 6; // -2 files, +1 rank
+    precomputed_knight_attacks |= (knight & ~FILE_X(1)) >> 17; // -1 file, -2 ranks
+    precomputed_knight_attacks |= (knight & ~FILE_X(8)) >> 15; // +1 file, -2 ranks
+    precomputed_knight_attacks |= (knight & ~(FILE_X(1) | FILE_X(2))) >> 10; // -2 files, -1 rank
+    precomputed_knight_attacks |= (knight & ~(FILE_X(8) | FILE_X(7))) >> 6; // +2 files, -1 rank
+
+    // Return the precomputed knight moves
+    return precomputed_knight_attacks;
+}
+
 // Function to generate moves for all knights on the bitboard
 static inline void generate_knight_moves(const Position* pos, MoveList* list, int side) {
     if (!pos || !list) return;
@@ -501,7 +525,6 @@ static inline void generate_knight_moves(const Position* pos, MoveList* list, in
     while (knights) {
         // Get the square of the first knight on the bitboard (start checking set bits from a1)
         int from = get_lsb(knights);
-
         // Skip if the square is out of bounds
         if (!ON_BOARD(from)) {
             pop_lsb(knights);
@@ -529,6 +552,13 @@ static inline void generate_knight_moves(const Position* pos, MoveList* list, in
         // Remove the knight from the bitboard to iterate to the next knight
         pop_lsb(knights); 
     }
+}
+
+// Function to generate moves for the bishop
+static inline Bitboard bishop_attacks(int sq, Bitboard occupancy, const MagicData* magic) {
+    Bitboard blockers = occupancy & magic->bishop_masks[sq];
+    uint64_t index = (blockers * magic->bishop_magics[sq]) >> (64 - magic->bishop_shifts[sq]);
+    return magic->bishop_attack_table[sq][index];
 }
 
 // Function to generate moves for all bishops on the bitboard
@@ -579,6 +609,13 @@ static inline void generate_bishop_moves(const Position* pos, MoveList* list, in
     }
 }
 
+// Function to generate moves for the rook
+static inline Bitboard rook_attacks(int sq, Bitboard occupancy, const MagicData* magic) {
+    Bitboard blockers = occupancy & magic->rook_masks[sq];
+    uint64_t index = (blockers * magic->rook_magics[sq]) >> (64 - magic->rook_shifts[sq]);
+    return magic->rook_attack_table[sq][index];
+}
+
 // Function to generate moves for all rooks on the bitboard
 static inline void generate_rook_moves(const Position* pos, MoveList* list, int side, const MagicData* magic) {
     if (!pos || !list) return;
@@ -627,6 +664,11 @@ static inline void generate_rook_moves(const Position* pos, MoveList* list, int 
     }
 }
 
+// Function to generate moves for the queen
+static inline Bitboard queen_attacks(int sq, Bitboard occupancy, const MagicData* magic) {
+    return rook_attacks(sq, occupancy, magic) | bishop_attacks(sq, occupancy, magic);
+}
+
 // Function to generate moves for all queens on the bitboard
 static inline void generate_queen_moves(const Position* pos, MoveList* list, int side, const MagicData* magic) {
     if (!pos || !list) return;
@@ -673,6 +715,30 @@ static inline void generate_queen_moves(const Position* pos, MoveList* list, int
         // Remove the queen from the bitboard to iterate to the next queen
         pop_lsb(queens);
     }
+}
+
+// Function to generate moves for the king
+static inline Bitboard king_attacks(int sq) {
+
+    // Initialize the king bitboard
+    Bitboard king = 0;
+    // Set the king to be on the given square
+    set_bit(king, sq);
+
+    // Precompute king moves with file masks to prevent wrap-around (overflow automatically handled by bitwise operations)
+    Bitboard precomputed_king_attacks = 0;
+
+    precomputed_king_attacks |= (king & ~FILE_X(1)) << 7; // -1 file, +1 rank
+    precomputed_king_attacks |= king << 8; // +1 rank
+    precomputed_king_attacks |= (king & ~FILE_X(8)) << 9; // +1 file, +1 rank
+    precomputed_king_attacks |= (king & ~FILE_X(8)) << 1; // +1 file
+    precomputed_king_attacks |= (king & ~FILE_X(8)) >> 7; // +1 file, -1 rank
+    precomputed_king_attacks |= king >> 8; // -1 rank
+    precomputed_king_attacks |= (king & ~FILE_X(1)) >> 9; // -1 file, -1 rank
+    precomputed_king_attacks |= (king & ~FILE_X(1)) >> 1; // -1 file
+    
+    // Return the precomputed king moves
+    return precomputed_king_attacks;
 }
 
 // Function to generate moves for all kings on the bitboard
@@ -755,25 +821,19 @@ static inline void generate_king_moves(const Position* pos, MoveList* list, int 
     }
 }
 
-// Check, checkmate, and stalemate detection
-int is_in_check(const Position* pos, int side, const MagicData* magic);
-int is_in_checkmate(const Position* pos, int side, const MagicData* magic, const ZobristKeys* keys);
-int is_in_stalemate(const Position* pos, int side, const MagicData* magic, const ZobristKeys* keys);
-
 // Make and unmake move
-int make_move(Position* pos, MoveState* state, int move, ZobristKeys* keys);
-int unmake_move(Position* pos, const MoveState* state, ZobristKeys* keys);
+int make_move(Position* pos, MoveState* state, int move);
+int unmake_move(Position* pos, const MoveState* state);
 
-/* ---------- Move generation functions ---------- */
-
-static inline int is_legal_move(const Position* pos, int move, const MagicData* magic, ZobristKeys* keys) {
+// Legal move generation
+static inline int is_legal_move(Position* pos, int move, const MagicData* magic) {
     if (!pos || move == 0) return 0;
 
     // Create a shallow copy of the Position struct
     Position temp = *pos;
     MoveState state;
     memcpy(&temp, pos, sizeof(Position));
-    if (!make_move(&temp, &state, move, keys)) {
+    if (!make_move(&temp, &state, move)) {
         return 0; // illegal move due to malformed input
     }
 
@@ -788,20 +848,6 @@ static inline int is_legal_move(const Position* pos, int move, const MagicData* 
     return !in_check;
 }
 
-static inline void generate_pseudo_legal_moves(const Position* pos, MoveList* list, int side, const MagicData* magic) {
-    if (!pos || !list) return;
-    memset(list->moves, 0, MAX_MOVES * sizeof(int));
-    list->count = 0; // Reset move count
-
-    // Generate moves for each piece type
-    generate_pawn_moves(pos, list, side);
-    generate_knight_moves(pos, list, side);
-    generate_bishop_moves(pos, list, side, magic);
-    generate_rook_moves(pos, list, side, magic);
-    generate_queen_moves(pos, list, side, magic);
-    generate_king_moves(pos, list, side, magic);
-}
-
-void generate_legal_moves(const Position* pos, MoveList* list, int side, const MagicData* magic, const ZobristKeys* keys);
+void generate_legal_moves(const Position* pos, MoveList* list, int side, const MagicData* magic);
 
 #endif

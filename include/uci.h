@@ -4,8 +4,7 @@
 #include "board.h"
 #include "movegen.h"
 #include "magic.h"
-
-#define STARTPOS_FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+#include "zobrist.h"
 
 void move_to_uci(int move, char out[6]);
 int parse_move(const Position* pos, const char* uci_str, const MagicData* magic, const ZobristKeys* keys);

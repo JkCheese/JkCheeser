@@ -1,4 +1,5 @@
 #include "board.h"
+#include "evalsearch.h"
 #include "engine.h"
 #include "magic.h"
 #include "moveformat.h"
@@ -39,5 +40,6 @@ int main() {
 
     uci_loop(&pos, &list, &state, depth, magic, keys);
     free(magic);
+    free(keys);
     return 0;
 }

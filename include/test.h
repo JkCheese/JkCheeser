@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 bool is_position_valid(const Position* pos);
-uint64_t perft_debug(Position* pos, int depth, const MagicData* magic);
-void perft_divide(Position* pos, int depth, const MagicData* magic);
+uint64_t perft_debug(Position* pos, int depth, const MagicData* magic, const ZobristKeys* keys);
+void perft_divide(Position* pos, int depth, const MagicData* magic, const ZobristKeys* keys);
 
 #endif

@@ -15,6 +15,10 @@ int piece_values[] = {
     100, 300, 300, 500, 900, 10000
 };
 
+const int futility_margin[] = {
+    0, 100, 250, 400
+};
+
 const int pawn_pst_mg[64] = {
     0,  0,  0,  0,  0,  0,  0,  0,
     50, 50, 50, 50, 50, 50, 50, 50,
@@ -389,6 +393,7 @@ int quiescence(Position* pos, int alpha, int beta, const MagicData* magic, Zobri
 int search(Position* pos, int depth, int ply, int alpha, int beta, const MagicData* magic, ZobristKeys* keys) {
     int original_alpha = alpha;
     int best_move = 0;
+    int stand_pat = 0;
 
     // Threefold repetition check
     if (is_threefold_repetition(pos->zobrist_hash)) {
@@ -396,38 +401,49 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, const MagicDa
         return eval > 0 ? -50 : 0; // Draw score
     }
 
-    // Push current hash to repetition stack
+    // Push zobrist hash to repetition stack
     int old_index = repetition_index;
     repetition_table[repetition_index++] = pos->zobrist_hash;
 
     // TT PROBE
     int tt_score;
-    if (tt_probe(pos->zobrist_hash, depth, alpha, beta, &tt_score, &best_move))
+    if (tt_probe(pos->zobrist_hash, depth, alpha, beta, &tt_score, &best_move)) {
+        repetition_index = old_index;  // Undo stack push
         return tt_score;
+    }
 
+    // Leaf node → Quiescence
     if (depth == 0) {
-        return quiescence(pos, alpha, beta, magic, keys);  // No magic needed here yet
+        repetition_index = old_index;
+        return quiescence(pos, alpha, beta, magic, keys);
     }
 
     // Null Move Pruning
     if (depth >= 3 && !is_in_check(pos, pos->side_to_move, magic)) {
         make_null_move(pos, keys);
-        int score = -search(pos, depth - 3, ply + 1, -beta, -beta + 1, magic, keys);  // null reduction = 2
+        int score = -search(pos, depth - 3, ply + 1, -beta, -beta + 1, magic, keys); // null reduction = 2
         unmake_null_move(pos, keys);
-
         if (score >= beta) {
-            return beta;  // Prune
+            repetition_index = old_index;
+            return beta;
         }
     }
 
-    MoveList list;
-    generate_legal_moves(pos, &list, pos->side_to_move, magic, keys);  // if your movegen needs magic
+    // Extended futility pruning setup
+    int can_futility_prune = 0;
+    if (depth <= 3 && !is_in_check(pos, pos->side_to_move, magic)) {
+        stand_pat = evaluation(pos);
+        can_futility_prune = 1;
+    }
 
-    // Move TT best move to the front if present
+    // Generate and order moves
+    MoveList list;
+    generate_legal_moves(pos, &list, pos->side_to_move, magic, keys);
+
+    // Prioritize TT best move
     if (best_move != 0) {
         for (int i = 0; i < list.count; i++) {
             if (list.moves[i] == best_move) {
-                // Swap with first move
                 int temp = list.moves[0];
                 list.moves[0] = best_move;
                 list.moves[i] = temp;
@@ -438,12 +454,10 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, const MagicDa
 
     sort_moves(pos, &list, ply);
 
+    // Check for mate/stalemate
     if (list.count == 0) {
-        if (is_in_check(pos, pos->side_to_move, magic)) {
-            return -MATE_SCORE + ply;  // Distance to mate (maximize delay)
-        } else {
-            return DRAW_SCORE;  // Stalemate
-        }
+        repetition_index = old_index;
+        return is_in_check(pos, pos->side_to_move, magic) ? -MATE_SCORE + ply : DRAW_SCORE;
     }
 
     int best_score = -MATE_SCORE;
@@ -451,14 +465,30 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, const MagicDa
 
     for (int i = 0; i < list.count; i++) {
         int move = list.moves[i];
+        int flag = MOVE_FLAG(move);
+        int is_capture = (flag == CAPTURE ||
+                          flag == PROMOTE_N_CAPTURE || flag == PROMOTE_B_CAPTURE ||
+                          flag == PROMOTE_R_CAPTURE || flag == PROMOTE_Q_CAPTURE);
+
+        // Extended Futility Pruning
+        if (can_futility_prune && !is_capture &&
+            stand_pat + futility_margin[depth] <= alpha)
+        {
+            continue;
+        }
 
         if (!make_move(pos, &state, move, keys)) continue;
 
-        int score = -search(pos, depth - 1, ply + 1, -beta, -alpha, magic, keys);
-
-        // if (state.has_castled) {
-        //     score += 200;  // e.g., 40
-        // }
+        int score;
+        if (depth >= 3 && i >= 3 && !is_capture && !is_in_check(pos, pos->side_to_move ^ 1, magic)) {
+            // Late Move Reduction (LMR)
+            score = -search(pos, depth - 2, ply + 1, -alpha - 1, -alpha, magic, keys);
+            if (score > alpha) {
+                score = -search(pos, depth - 1, ply + 1, -beta, -alpha, magic, keys);
+            }
+        } else {
+            score = -search(pos, depth - 1, ply + 1, -beta, -alpha, magic, keys);
+        }
 
         unmake_move(pos, &state, keys);
 
@@ -472,32 +502,30 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, const MagicDa
         }
 
         if (alpha >= beta) {
-            // Extract from and to squares from move
+            // History and Killer Heuristics
             int from = MOVE_FROM(move);
-            int to = MOVE_TO(move);
-            int flag = MOVE_FLAG(move);
+            int to   = MOVE_TO(move);
 
-            if (flag != CAPTURE && flag != PROMOTE_N_CAPTURE && flag != PROMOTE_B_CAPTURE && flag != PROMOTE_R_CAPTURE && flag != PROMOTE_Q_CAPTURE) {
-                history_table[from][to] += depth * depth;  // quiet move history update
+            if (!is_capture) {
+                history_table[from][to] += depth * depth;
 
-                // Killer moves
                 if (killer_moves[ply][0] != move) {
                     killer_moves[ply][1] = killer_moves[ply][0];
                     killer_moves[ply][0] = move;
                 }
             }
 
-            break;
+            break; // Beta cutoff
         }
     }
 
     // Store in TT
     TTFlag flag = (best_score <= original_alpha) ? TT_ALPHA :
                   (best_score >= beta)           ? TT_BETA :
-                                                   TT_EXACT;
+                                                    TT_EXACT;
     tt_store(pos->zobrist_hash, depth, best_score, best_move, flag);
 
-    // Pop hash off stack
+    // Undo repetition stack
     repetition_index = old_index;
 
     return best_score;

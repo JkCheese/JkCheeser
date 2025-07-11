@@ -15,7 +15,7 @@ SRC = \
 	src/zobrist.c
 
 OBJ = $(SRC:.c=.o)
-BIN = v5-3fold
+BIN = v7-futility
 
 all: $(BIN)
 

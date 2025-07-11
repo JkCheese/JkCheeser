@@ -15,7 +15,7 @@ SRC = \
 	src/zobrist.c
 
 OBJ = $(SRC:.c=.o)
-BIN = v8-testing
+BIN = v9_21-mobility_activity_rooks
 
 all: $(BIN)
 

@@ -37,8 +37,9 @@ int main() {
     Position pos;
     MoveState state;
     MoveList list;
+    EvalParams params;
 
-    uci_loop(&pos, &list, &state, depth, magic, keys);
+    uci_loop(&pos, &list, &state, depth, &params, magic, keys);
     free(magic);
     free(keys);
     return 0;

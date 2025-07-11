@@ -170,9 +170,261 @@ const int king_pst_eg[64] = {
     -74, -35, -18, -18, -11,  15,   4, -17
 };
 
-#define MAX_REP_HISTORY 1024
+EvalParams eval_params = {
+    // King safety
+    50.0, 30.0, 40.0,
+
+    // Tropism
+    10.0, 6.0, 4.0, 8.0,
+
+    // Rooks
+    20.0, 10.0, 15.0,
+
+    // Knights
+    20.0, 30.0,
+
+    // Bishops
+    10.0, 15.0, 30.0, 10.0,
+
+    // Passed pawns (rank 0 = file 1, rank 7 = file 8)
+    {0, 5, 10, 20, 30, 50, 80, 100},
+
+    // Pawn structure
+    -10.0, -8.0, -6.0, 20.0,
+
+    // Space and activity
+    1.0, 2.0,
+
+    // Number of attacked squares => bonus in centipawns
+    { -10, -5, 0, 5, 10, 15, 20, 25, 30 },
+    { -10, -5, 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60 },
+    { -10, -5, 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60 },
+    { -10, -5, 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125 }
+
+};
+
 uint64_t repetition_table[MAX_REP_HISTORY];
 int repetition_index = 0;
+
+int evaluate_rook_files(const Position* pos, int side, EvalParams* params) {
+    int score = 0;
+    Bitboard rooks = pos->pieces[side == WHITE ? WR : BR];
+    Bitboard friendly_pawns = pos->pieces[side == WHITE ? WP : BP];
+    Bitboard enemy_pawns = pos->pieces[side == WHITE ? BP : WP];
+
+    while (rooks) {
+        int sq = get_lsb(rooks);
+        pop_lsb(rooks);
+
+        Bitboard file_mask = FILE_X(FILE(sq));
+
+        int friendly_pawns_on_file = count_bits(friendly_pawns & file_mask);
+        int enemy_pawns_on_file = count_bits(enemy_pawns & file_mask);
+
+        if (friendly_pawns_on_file == 0 && enemy_pawns_on_file == 0) {
+            // Open file
+            score += params->rook_open_file_bonus;
+        } else if (friendly_pawns_on_file == 0 && enemy_pawns_on_file > 0) {
+            // Semi-open file
+            score += params->rook_semi_open_file_bonus;
+        }
+    }
+
+    return score;
+}
+
+int evaluate_mobility(const Position* pos, int side, EvalParams* params, MagicData* magic) {
+    int score = 0;
+
+    Bitboard occ = pos->occupied[ALL];
+    Bitboard own = pos->occupied[side];
+
+    // Knights
+    Bitboard knights = pos->pieces[side == WHITE ? WN : BN];
+    while (knights) {
+        int sq = get_lsb(knights);
+        pop_lsb(knights);
+
+        Bitboard attacks = knight_attacks(sq) & ~own;
+        int mobility = count_bits(attacks);
+        if (mobility > 8) mobility = 8;
+        score += params->knight_mobility_bonus[mobility];
+    }
+
+    // Bishops
+    Bitboard bishops = pos->pieces[side == WHITE ? WB : BB];
+    while (bishops) {
+        int sq = get_lsb(bishops);
+        pop_lsb(bishops);
+
+        Bitboard attacks = bishop_attacks(sq, occ, magic) & ~own;
+        int mobility = count_bits(attacks);
+        if (mobility > 13) mobility = 13;
+        score += params->bishop_mobility_bonus[mobility];
+    }
+
+    // Rooks
+    Bitboard rooks = pos->pieces[side == WHITE ? WR : BR];
+    while (rooks) {
+        int sq = get_lsb(rooks);
+        pop_lsb(rooks);
+
+        Bitboard attacks = rook_attacks(sq, occ, magic) & ~own;
+        int mobility = count_bits(attacks);
+        if (mobility > 14) mobility = 14;
+        score += params->rook_mobility_bonus[mobility];
+    }
+
+    // Queens
+    Bitboard queens = pos->pieces[side == WHITE ? WQ : BQ];
+    while (queens) {
+        int sq = get_lsb(queens);
+        pop_lsb(queens);
+
+        Bitboard attacks = queen_attacks(sq, occ, magic) & ~own;
+        int mobility = count_bits(attacks);
+        if (mobility > 27) mobility = 27;
+        score += params->queen_mobility_bonus[mobility];
+    }
+
+    return score;
+}
+
+static inline int manhattan_distance(int sq1, int sq2) {
+    int f1 = sq1 & 7, r1 = sq1 >> 3;
+    int f2 = sq2 & 7, r2 = sq2 >> 3;
+    return abs(f1 - f2) + abs(r1 - r2);
+}
+
+int evaluate_tropism_side(const Position* pos, int side, int enemy_king_sq, const EvalParams* params) {
+    int total = 0;
+
+    int q = (side == WHITE) ? WQ : BQ;
+    int r = (side == WHITE) ? WR : BR;
+    int b = (side == WHITE) ? WB : BB;
+    int n = (side == WHITE) ? WN : BN;
+
+    Bitboard queens  = pos->pieces[q];
+    Bitboard rooks   = pos->pieces[r];
+    Bitboard bishops = pos->pieces[b];
+    Bitboard knights = pos->pieces[n];
+
+    for (int sq = 0; sq < 64; sq++) {
+        Bitboard bb = 1ULL << sq;
+
+        if (queens & bb) {
+            int dist = manhattan_distance(sq, enemy_king_sq);
+            if (dist <= 7)
+                total += params->queen_tropism * (7 - dist);
+        }
+
+        if (rooks & bb) {
+            int dist = manhattan_distance(sq, enemy_king_sq);
+            if (dist <= 7)
+                total += params->rook_tropism * (7 - dist);
+        }
+
+        if (bishops & bb) {
+            int dist = manhattan_distance(sq, enemy_king_sq);
+            if (dist <= 7)
+                total += params->bishop_tropism * (7 - dist);
+        }
+
+        if (knights & bb) {
+            int dist = manhattan_distance(sq, enemy_king_sq);
+            if (dist <= 7)
+                total += params->knight_tropism * (7 - dist);
+        }
+    }
+
+    return total;
+}
+
+int evaluate_king_tropism(const Position* pos, const EvalParams* params) {
+    int score = 0;
+
+    int white_king_sq = pos->king_from[WHITE];
+    int black_king_sq = pos->king_from[BLACK];
+
+    score += evaluate_tropism_side(pos, WHITE, black_king_sq, params);
+    score -= evaluate_tropism_side(pos, BLACK, white_king_sq, params);
+
+    return score;
+}
+
+// Get bitboard of squares around the king (max 8 squares around)
+static inline uint64_t get_king_zone(int king_sq) {
+    static const int directions[8] = {8, -8, 1, -1, 9, 7, -7, -9};
+    uint64_t zone = 1ULL << king_sq;
+    int king_file = king_sq % 8;
+
+    for (int i = 0; i < 8; i++) {
+        int sq = king_sq + directions[i];
+        if (sq >= 0 && sq < 64) {
+            int file = sq % 8;
+            // prevent horizontal wrap around
+            if (abs(file - king_file) <= 1) {
+                zone |= (1ULL << sq);
+            }
+        }
+    }
+    return zone;
+}
+
+// Count enemy attacks on squares in the king zone
+int count_enemy_attackers(const Position* pos, uint64_t king_zone, int enemy_color, const MagicData* magic) {
+    int attackers = 0;
+    for (int sq = 0; sq < 64; sq++) {
+        if ((king_zone & (1ULL << sq)) && is_square_attacked(pos, sq, enemy_color, magic)) {
+            attackers++;
+        }
+    }
+    return attackers;
+}
+
+// Count friendly pawn shield squares in front of the king
+int count_pawn_shield(const Position* pos, int king_sq, int color) {
+    // relative squares where pawn shield is expected (depends on color)
+    static const int white_shield_offsets[3] = {-8, -7, -9};
+    static const int black_shield_offsets[3] = {8, 7, 9};
+
+    const int* offsets = (color == WHITE) ? white_shield_offsets : black_shield_offsets;
+    int shield_pawns = 0;
+
+    for (int i = 0; i < 3; i++) {
+        int sq = king_sq + offsets[i];
+        if (sq < 0 || sq >= 64) continue;
+
+        int piece = get_piece_on_square(pos, sq);
+        if (piece != -1) {
+            int piece_color = (piece < 6) ? WHITE : BLACK;
+            int piece_type = piece % 6;
+            if (piece_color == color && piece_type == P) {
+                shield_pawns++;
+            }
+        }
+    }
+    return shield_pawns;
+}
+
+// King safety evaluation function
+int evaluate_king_safety(const Position* pos, int king_sq, int color, EvalParams* params, const MagicData* magic) {
+    int enemy_color = color ^ 1;
+    uint64_t zone = get_king_zone(king_sq);
+    int attackers = count_enemy_attackers(pos, zone, enemy_color, magic);
+    int shield_pawns = count_pawn_shield(pos, king_sq, color);
+
+    // Simple penalty: more attackers → worse; more shield pawns → better
+    int penalty = attackers * 50 - shield_pawns * 30;
+
+    // If king is uncastled
+    if ((color == WHITE && king_sq == E1) || (color == BLACK && king_sq == E8)) {
+        penalty += params->uncastled_king_penalty;
+    }
+
+    if (penalty < 0) penalty = 0;
+    return penalty;
+}
 
 bool is_threefold_repetition(uint64_t hash) {
     int count = 0;
@@ -250,7 +502,7 @@ int move_order_heuristic(const Position* pos, int move, int ply) {
     return history_table[from][to];
 }
 
-int evaluation(const Position* pos) {
+int evaluation(const Position* pos, EvalParams* params, const MagicData* magic) {
     int mg_score = 0;
     int eg_score = 0;
 
@@ -267,6 +519,18 @@ int evaluation(const Position* pos) {
         // Material + PST
         int mg = mg_value[type];
         int eg = eg_value[type];
+
+        int white_bishops = count_bits(pos->pieces[WB]);
+        int black_bishops = count_bits(pos->pieces[BB]);
+
+        if (white_bishops >= 2) {
+            mg += params->bishop_pair_mg;
+            eg += params->bishop_pair_eg;
+        }
+        if (black_bishops >= 2) {
+            mg -= params->bishop_pair_mg;
+            eg -= params->bishop_pair_eg;
+        }
 
         switch (type) {
             case P:
@@ -292,6 +556,16 @@ int evaluation(const Position* pos) {
             case K:
                 mg += king_pst_mg[sq_mirrored];
                 eg += king_pst_eg[sq_mirrored];
+
+                // Add king safety penalty (subtract because penalty lowers score)
+                int safety_penalty = evaluate_king_safety(pos, sq, color, params, magic);
+
+                if (color == pos->side_to_move) {
+                    mg -= safety_penalty;
+                } else {
+                    mg += safety_penalty;
+                }
+                break;
         }
 
         // Add to score with sign depending on color
@@ -303,6 +577,20 @@ int evaluation(const Position* pos) {
             eg_score -= eg;
         }
     }
+
+    // Tropism bonus
+    int tropism = evaluate_king_tropism(pos, &eval_params);
+    mg_score += (tropism * phase) >> 8;  // fade out in endgame
+
+    // Mobility bonus/penalty
+    int mobility_own = evaluate_mobility(pos, pos->side_to_move, params, magic);
+    int mobility_opp = evaluate_mobility(pos, pos->side_to_move ^ 1, params, magic);
+    mg_score += mobility_own - mobility_opp;
+
+    // Active rook bonus/penalty
+    int rook_files_own = evaluate_rook_files(pos, pos->side_to_move, params);
+    int rook_files_opp = evaluate_rook_files(pos, pos->side_to_move ^ 1, params);
+    mg_score += rook_files_own - rook_files_opp;
 
     // Interpolate final score
     return (mg_score * phase + eg_score * (256 - phase)) >> 8;
@@ -367,7 +655,7 @@ int see(const Position* pos, int move, const MagicData* magic) {
     return gain[0];
 }
 
-int quiescence(Position* pos, int alpha, int beta, const MagicData* magic, ZobristKeys* keys) {
+int quiescence(Position* pos, int alpha, int beta, EvalParams* params, const MagicData* magic, ZobristKeys* keys) {
 
     // if (is_threefold_repetition(pos->zobrist_hash)) {
     //     return 0;
@@ -375,7 +663,7 @@ int quiescence(Position* pos, int alpha, int beta, const MagicData* magic, Zobri
     // int old_index = repetition_index;
     // repetition_table[repetition_index++] = pos->zobrist_hash;
 
-    int stand_pat = evaluation(pos);
+    int stand_pat = evaluation(pos, params, magic);
 
     if (stand_pat >= beta)
         return beta;  // fail-hard beta cutoff
@@ -436,7 +724,7 @@ int quiescence(Position* pos, int alpha, int beta, const MagicData* magic, Zobri
         if (!make_move(pos, &state, move, keys))
             continue;
 
-        int score = -quiescence(pos, -beta, -alpha, magic, keys);
+        int score = -quiescence(pos, -beta, -alpha, params, magic, keys);
 
         unmake_move(pos, &state, keys);
 
@@ -451,20 +739,22 @@ int quiescence(Position* pos, int alpha, int beta, const MagicData* magic, Zobri
     return alpha;
 }
 
-int search(Position* pos, int depth, int ply, int alpha, int beta, const MagicData* magic, ZobristKeys* keys) {
+int search(Position* pos, int depth, int ply, int alpha, int beta, EvalParams* params, const MagicData* magic, ZobristKeys* keys) {
     int original_alpha = alpha;
     int best_move = 0;
     int stand_pat = 0;
-
-    // Threefold repetition check
-    if (is_threefold_repetition(pos->zobrist_hash)) {
-        int eval = evaluation(pos);
-        return eval > 0 ? -50 : 0; // Draw score
-    }
-
+    
     // Push zobrist hash to repetition stack
     int old_index = repetition_index;
     repetition_table[repetition_index++] = pos->zobrist_hash;
+    
+    // Threefold repetition check
+    if (is_threefold_repetition(pos->zobrist_hash)) {
+        int eval = evaluation(pos, params, magic);
+        printf("Draw eval: %d\n", eval);
+        return eval > 0 ? -50 : 0; // Draw score
+    }
+
 
     // TT PROBE
     int tt_score;
@@ -476,13 +766,13 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, const MagicDa
     // Leaf node → Quiescence
     if (depth == 0) {
         repetition_index = old_index;
-        return quiescence(pos, alpha, beta, magic, keys);
+        return quiescence(pos, alpha, beta, params, magic, keys);
     }
 
     // Null Move Pruning
     if (depth >= 3 && !is_in_check(pos, pos->side_to_move, magic)) {
         make_null_move(pos, keys);
-        int score = -search(pos, depth - 3, ply + 1, -beta, -beta + 1, magic, keys); // null reduction = 2
+        int score = -search(pos, depth - 3, ply + 1, -beta, -beta + 1, params, magic, keys); // null reduction = 2
         unmake_null_move(pos, keys);
         if (score >= beta) {
             repetition_index = old_index;
@@ -493,7 +783,7 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, const MagicDa
     // Extended futility pruning setup
     int can_futility_prune = 0;
     if (depth <= 3 && !is_in_check(pos, pos->side_to_move, magic)) {
-        stand_pat = evaluation(pos);
+        stand_pat = evaluation(pos, params, magic);
         can_futility_prune = 1;
     }
 
@@ -543,12 +833,12 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, const MagicDa
         int score;
         if (depth >= 3 && i >= 3 && !is_capture && !is_in_check(pos, pos->side_to_move ^ 1, magic)) {
             // Late Move Reduction (LMR)
-            score = -search(pos, depth - 2, ply + 1, -alpha - 1, -alpha, magic, keys);
+            score = -search(pos, depth - 2, ply + 1, -alpha - 1, -alpha, params, magic, keys);
             if (score > alpha) {
-                score = -search(pos, depth - 1, ply + 1, -beta, -alpha, magic, keys);
+                score = -search(pos, depth - 1, ply + 1, -beta, -alpha, params, magic, keys);
             }
         } else {
-            score = -search(pos, depth - 1, ply + 1, -beta, -alpha, magic, keys);
+            score = -search(pos, depth - 1, ply + 1, -beta, -alpha, params, magic, keys);
         }
 
         unmake_move(pos, &state, keys);
@@ -592,7 +882,7 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, const MagicDa
     return best_score;
 }
 
-int find_best_move(Position* pos, int depth, const MagicData* magic, ZobristKeys* keys) {
+int find_best_move(Position* pos, int depth, EvalParams* params, const MagicData* magic, ZobristKeys* keys) {
     for (int i = 0; i < MAX_PLY; i++) {
         killer_moves[i][0] = 0;
         killer_moves[i][1] = 0;
@@ -626,7 +916,7 @@ int find_best_move(Position* pos, int depth, const MagicData* magic, ZobristKeys
         int move = list.moves[i];
         if (!make_move(pos, &state, move, keys)) continue;
 
-        int score = -search(pos, depth - 1, 1, -MATE_SCORE, MATE_SCORE, magic, keys);
+        int score = -search(pos, depth - 1, 1, -MATE_SCORE, MATE_SCORE, params, magic, keys);
         unmake_move(pos, &state, keys);
 
         if (score > best_score) {

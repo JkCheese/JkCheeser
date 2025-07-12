@@ -34,50 +34,50 @@ static inline int mirror(int sq) {
 
 typedef struct {
     // King Safety
-    double king_attackers_penalty;
-    double king_pawn_shield_bonus;
-    double uncastled_king_penalty;
+    int king_attackers_penalty;
+    int king_pawn_shield_bonus;
+    int uncastled_king_penalty;
 
     // Tropism
-    double queen_tropism;
-    double rook_tropism;
-    double bishop_tropism;
-    double knight_tropism;
+    int queen_tropism;
+    int rook_tropism;
+    int bishop_tropism;
+    int knight_tropism;
 
     // Rook evaluation
-    double rook_open_file_bonus;
-    double rook_semi_open_file_bonus;
-    double rook_on_7th_bonus;
+    int rook_open_file_bonus;
+    int rook_semi_open_file_bonus;
+    int rook_on_7th_bonus;
 
     // Knight evaluation
-    double knight_outpost_bonus;
-    double knight_outpost_defended_bonus;
+    int knight_outpost_pst[64];
+    int knight_outpost_defended_bonus;
 
     // Bishop evaluation
-    double bishop_long_diagonal_bonus;
-    double bishop_open_diagonal_bonus;
-    double bishop_pair_mg; // bonus in centipawns
-    double bishop_pair_eg; // usually less important, smaller value
+    int bishop_long_diagonal_bonus;
+    int bishop_open_diagonal_bonus;
+    int bishop_pair_mg; // bonus in centipawns
+    int bishop_pair_eg; // usually less important, smaller value
 
     // Passed pawns
-    double passed_pawn_bonus[8];  // bonus per rank (0–7), index by rank
+    int passed_pawn_bonus[8];  // bonus per rank (0–7), index by rank
 
     // Pawn structure
-    double isolated_pawn_penalty;
-    double doubled_pawn_penalty;
-    double backward_pawn_penalty;
-    double connected_passed_bonus;
+    int isolated_pawn_penalty;
+    int intd_pawn_penalty;
+    int backward_pawn_penalty;
+    int connected_passed_bonus;
 
     // Space and activity
-    double space_bonus;
-    double piece_activity_bonus;
+    int space_bonus;
+    int piece_activity_bonus;
 
     // Mobility:
     // Number of attacked squares => bonus in centipawns
-    double knight_mobility_bonus[9];
-    double bishop_mobility_bonus[15];
-    double rook_mobility_bonus[15];
-    double queen_mobility_bonus[28];
+    int knight_mobility_bonus[9];
+    int bishop_mobility_bonus[15];
+    int rook_mobility_bonus[15];
+    int queen_mobility_bonus[28];
 
 
 } EvalParams;

@@ -10,6 +10,7 @@ SRC = \
 	src/magic.c \
 	src/main.c \
 	src/test.c \
+	src/tune.c \
 	src/tt.c \
 	src/uci.c \
 	src/zobrist.c

@@ -42,7 +42,7 @@ int parse_move(const Position* pos, const char* uci_str, const MagicData* magic,
     return 0; // Illegal move
 }
 
-void uci_loop(Position* pos, MoveList* list, MoveState* state, int depth, EvalParams* params, const MagicData* magic, const ZobristKeys* keys) {
+void uci_loop(Position* pos, MoveList* list, MoveState* state, int depth, const MagicData* magic, const ZobristKeys* keys) {
     char line[32767];
     printf("id name JkCheeserChess\n");
     printf("id author JkCheese\n");
@@ -71,8 +71,8 @@ void uci_loop(Position* pos, MoveList* list, MoveState* state, int depth, EvalPa
                 sscanf(ptr, "%255[^\n]", fen);
                 init_position(pos, fen);
                 generate_legal_moves(pos, list, pos->side_to_move, magic, keys);
-                // print_moves(pos, list, magic, keys);
-                // perft_debug(pos, depth, magic, keys);
+                print_moves(pos, list, magic, keys);
+                perft_debug(pos, depth, magic, keys);
                 // Initialize Zobrist hashing
                 pos->zobrist_hash = compute_zobrist_hash(pos, keys);
                 ptr += strlen(fen);
@@ -90,12 +90,6 @@ void uci_loop(Position* pos, MoveList* list, MoveState* state, int depth, EvalPa
                             fprintf(stderr, "Illegal move in move list: %s\n", move_str);
                             break;
                         }
-
-                        repetition_table[repetition_index++] = pos->zobrist_hash;
-
-                        int eval = evaluation(pos, params, magic);
-                        printf("info string Eval after move %s: %d\n", move_str, eval);
-
                     }
                     moves += strlen(move_str);
                     while (*moves == ' ') moves++;
@@ -104,16 +98,12 @@ void uci_loop(Position* pos, MoveList* list, MoveState* state, int depth, EvalPa
         } else if (strncmp(line, "go", 2) == 0) {
             generate_legal_moves(pos, list, pos->side_to_move, magic, keys);
             if (list->count > 0) {
-                int move = find_best_move(pos, depth, params, magic, keys);  // or depth 4 if fast enough;
+                int move = find_best_move(pos, depth, magic, keys);  // or depth 4 if fast enough;
                 if (move == 0) {
                     printf("bestmove 0000\n");  // Null move (no legal moves, e.g., checkmate or stalemate)
                 } else {
                     char bestmove[6];
                     move_to_uci(move, bestmove);
-
-                    int eval = evaluation(pos, params, magic);
-                    printf("info string Eval before bestmove %s: %d\n", bestmove, eval);
-
                     printf("bestmove %s\n", bestmove);
                 }
             }

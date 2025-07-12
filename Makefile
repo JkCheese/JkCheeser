@@ -10,13 +10,12 @@ SRC = \
 	src/magic.c \
 	src/main.c \
 	src/test.c \
-	src/tune.c \
 	src/tt.c \
 	src/uci.c \
 	src/zobrist.c
 
 OBJ = $(SRC:.c=.o)
-BIN = v9_21-mobility_activity_rooks
+BIN = v8-testing
 
 all: $(BIN)
 

@@ -4,8 +4,6 @@
 #include "board.h"
 #include <stdint.h>
 
-#define Bitboard uint64_t
-
 typedef struct {
     Bitboard zobrist_pieces[12][64]; // piece x square
     Bitboard zobrist_side; // side to move

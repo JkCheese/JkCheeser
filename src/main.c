@@ -6,6 +6,7 @@
 #include "movegen.h"
 #include "operations.h"
 #include "test.h"
+#include "tune.h"
 #include "uci.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,7 +21,7 @@
 
 int depth = 6;
 
-int main() {
+int main(int argc, char* argv[]) {
     MagicData* magic = malloc(sizeof(MagicData));
     if (!magic) {
         fprintf(stderr, "Failed to allocate MagicData\n");
@@ -37,8 +38,11 @@ int main() {
     Position pos;
     MoveState state;
     MoveList list;
+    EvalParams params;
+    EvalParamsDouble dparams;
 
-    uci_loop(&pos, &list, &state, depth, magic, keys);
+    // uci_loop(&pos, &list, &state, depth, &params, magic, keys);
+    tuner(&pos, &params, magic, argc, argv);
     free(magic);
     free(keys);
     return 0;

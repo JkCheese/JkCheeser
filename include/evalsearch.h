@@ -5,9 +5,6 @@
 #include "movegen.h"
 #include "magic.h"
 
-#define MATE_SCORE 100000
-#define DRAW_SCORE 0
-
 #define MAX_PLY 64  // Max search depth you expect
 extern int killer_moves[MAX_PLY][2];  // Two killer moves per ply
 

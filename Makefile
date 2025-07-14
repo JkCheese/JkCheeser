@@ -15,7 +15,7 @@ SRC = \
 	src/zobrist.c
 
 OBJ = $(SRC:.c=.o)
-BIN = v7-futility
+BIN = v8-testing
 
 all: $(BIN)
 

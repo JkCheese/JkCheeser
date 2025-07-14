@@ -19,6 +19,25 @@ const int futility_margin[] = {
     0, 100, 250, 400
 };
 
+#define PHASE_MAX 16
+
+const int phase_values[6] = {
+    0, // Pawn
+    1, // Knight
+    1, // Bishop
+    2, // Rook
+    4, // Queen
+    0  // King
+};
+
+const int mg_value[6] = {
+    82, 337, 365, 477, 1025, 0
+}; // Middlegame
+
+const int eg_value[6] = {
+    94, 281, 297, 512, 936, 0
+}; // Endgame
+
 const int pawn_pst_mg[64] = {
     0,  0,  0,  0,  0,  0,  0,  0,
     50, 50, 50, 50, 50, 50, 50, 50,
@@ -141,18 +160,15 @@ const int king_pst_mg[64] = {
 };
 
 const int king_pst_eg[64] = {
-    -50,-40,-30,-20,-20,-30,-40,-50,
-    -30,-20,-10,  0,  0,-10,-20,-30,
-    -30,-10, 20, 30, 30, 20,-10,-30,
-    -30,-10, 30, 40, 40, 30,-10,-30,
-    -30,-10, 30, 40, 40, 30,-10,-30,
-    -30,-10, 20, 30, 30, 20,-10,-30,
-    -30,-30,  0,  0,  0,  0,-30,-30,
-    -50,-30,-30,-30,-30,-30,-30,-50
+    -53, -34, -21, -11, -28, -14, -24, -43,
+    -27, -11,   4,  13,  14,   4,  -5, -17,
+    -19,  -3,  11,  21,  23,  16,   7,  -9,
+    -18,  -4,  21,  24,  27,  23,   9, -11,
+    -8,  22,  24,  27,  26,  33,  26,   3,
+    10,  17,  23,  15,  20,  45,  44,  13,
+    -12,  17,  14,  17,  17,  38,  23,  11,
+    -74, -35, -18, -18, -11,  15,   4, -17
 };
-
-#define MATE_SCORE 100000
-#define DRAW_SCORE 0
 
 #define MAX_REP_HISTORY 1024
 uint64_t repetition_table[MAX_REP_HISTORY];
@@ -166,6 +182,24 @@ bool is_threefold_repetition(uint64_t hash) {
         }
     }
     return false;
+}
+
+int compute_phase(const Position* pos) {
+    int phase = PHASE_MAX;
+
+    for (int sq = 0; sq < 64; sq++) {
+        int piece = get_piece_on_square(pos, sq);
+        if (piece == -1) continue;
+
+        int type = piece % 6;
+        if (type == P || type == K) continue;
+
+        phase -= phase_values[type];
+    }
+
+    if (phase < 0) phase = 0;
+    if (phase > PHASE_MAX) phase = PHASE_MAX;
+    return phase;
 }
 
 void make_null_move(Position* pos, ZobristKeys* keys) {
@@ -217,7 +251,10 @@ int move_order_heuristic(const Position* pos, int move, int ply) {
 }
 
 int evaluation(const Position* pos) {
-    int eval_score = 0;
+    int mg_score = 0;
+    int eg_score = 0;
+
+    int phase = compute_phase(pos) * 256 / PHASE_MAX;
 
     for (int sq = 0; sq < 64; sq++) {
         int piece = get_piece_on_square(pos, sq);
@@ -225,26 +262,50 @@ int evaluation(const Position* pos) {
 
         int side = (piece < 6) ? WHITE : BLACK;
         int type = piece % 6;
-        int value = piece_values[type];
+        int sq_mirrored = (color == WHITE) ? sq : ((sq ^ 56)); // flip vertically
 
-        // Add PSQT score
-        int pst_score = 0;
-        int mirrored_sq = (side == WHITE) ? sq : (56 ^ (sq & 56)) | (sq & 7);  // vertical flip
+        // Material + PST
+        int mg = mg_value[type];
+        int eg = eg_value[type];
 
         switch (type) {
-            case P: pst_score = pawn_pst_mg[mirrored_sq]; break;
-            case N: pst_score = knight_pst_mg[mirrored_sq]; break;
-            case B: pst_score = bishop_pst_mg[mirrored_sq]; break;
-            case R: pst_score = rook_pst_mg[mirrored_sq]; break;
-            case Q: pst_score = queen_pst_mg[mirrored_sq]; break;
-            case K: pst_score = king_pst_mg[mirrored_sq]; break;
+            case P:
+                mg += pawn_pst_mg[sq_mirrored];
+                eg += pawn_pst_eg[sq_mirrored];
+                break;
+            case N:
+                mg += knight_pst_mg[sq_mirrored];
+                eg += knight_pst_eg[sq_mirrored];
+                break;
+            case B:
+                mg += bishop_pst_mg[sq_mirrored];
+                eg += bishop_pst_eg[sq_mirrored];
+                break;
+            case R:
+                mg += rook_pst_mg[sq_mirrored];
+                eg += rook_pst_eg[sq_mirrored];
+                break;
+            case Q:
+                mg += queen_pst_mg[sq_mirrored];
+                eg += queen_pst_eg[sq_mirrored];
+                break;
+            case K:
+                mg += king_pst_mg[sq_mirrored];
+                eg += king_pst_eg[sq_mirrored];
         }
 
-        int score = value + pst_score;
-        eval_score += (side == pos->side_to_move) ? score : -score;
+        // Add to score with sign depending on color
+        if (color == pos->side_to_move) {
+            mg_score += mg;
+            eg_score += eg;
+        } else {
+            mg_score -= mg;
+            eg_score -= eg;
+        }
     }
 
-    return eval_score;
+    // Interpolate final score
+    return (mg_score * phase + eg_score * (256 - phase)) >> 8;
 }
 
 int see(const Position* pos, int move, const MagicData* magic) {

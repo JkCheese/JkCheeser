@@ -10,8 +10,8 @@
 #define RANK(sq) (sq / 8)
 #define FILE(sq) (sq % 8)
 
-#define RANK_X(rank_num) (0x00000000000000FFULL << ((rank_num - 1) * 8))
-#define FILE_X(file_num) (0x0101010101010101ULL << (file_num - 1))
+#define RANK_X(rank_num) (0x00000000000000FFULL << ((rank_num) * 8))
+#define FILE_X(file_num) (0x0101010101010101ULL << (file_num))
 
 typedef uint64_t Bitboard;
 typedef uint64_t File;

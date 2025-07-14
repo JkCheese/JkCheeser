@@ -84,14 +84,14 @@ static inline Bitboard knight_attacks(int sq) {
     // Precompute knight moves with file masks to prevent wrap-around (overflow automatically handled by bitwise operations)
     Bitboard precomputed_knight_attacks = 0;
 
-    precomputed_knight_attacks |= (knight & ~FILE_X(8)) << 17; // +1 file, +2 ranks
-    precomputed_knight_attacks |= (knight & ~FILE_X(1)) << 15; // -1 file, +2 ranks
-    precomputed_knight_attacks |= (knight & ~(FILE_X(8) | FILE_X(7))) << 10; // +2 files, +1 rank
-    precomputed_knight_attacks |= (knight & ~(FILE_X(1) | FILE_X(2))) << 6; // -2 files, +1 rank
-    precomputed_knight_attacks |= (knight & ~FILE_X(1)) >> 17; // -1 file, -2 ranks
-    precomputed_knight_attacks |= (knight & ~FILE_X(8)) >> 15; // +1 file, -2 ranks
-    precomputed_knight_attacks |= (knight & ~(FILE_X(1) | FILE_X(2))) >> 10; // -2 files, -1 rank
-    precomputed_knight_attacks |= (knight & ~(FILE_X(8) | FILE_X(7))) >> 6; // +2 files, -1 rank
+    precomputed_knight_attacks |= (knight & ~FILE_X(7)) << 17; // +1 file, +2 ranks
+    precomputed_knight_attacks |= (knight & ~FILE_X(0)) << 15; // -1 file, +2 ranks
+    precomputed_knight_attacks |= (knight & ~(FILE_X(7) | FILE_X(6))) << 10; // +2 files, +1 rank
+    precomputed_knight_attacks |= (knight & ~(FILE_X(0) | FILE_X(1))) << 6; // -2 files, +1 rank
+    precomputed_knight_attacks |= (knight & ~FILE_X(0)) >> 17; // -1 file, -2 ranks
+    precomputed_knight_attacks |= (knight & ~FILE_X(7)) >> 15; // +1 file, -2 ranks
+    precomputed_knight_attacks |= (knight & ~(FILE_X(0) | FILE_X(1))) >> 10; // -2 files, -1 rank
+    precomputed_knight_attacks |= (knight & ~(FILE_X(7) | FILE_X(6))) >> 6; // +2 files, -1 rank
 
     // Return the precomputed knight moves
     return precomputed_knight_attacks;
@@ -127,14 +127,14 @@ static inline Bitboard king_attacks(int sq) {
     // Precompute king moves with file masks to prevent wrap-around (overflow automatically handled by bitwise operations)
     Bitboard precomputed_king_attacks = 0;
 
-    precomputed_king_attacks |= (king & ~FILE_X(1)) << 7; // -1 file, +1 rank
+    precomputed_king_attacks |= (king & ~FILE_X(0)) << 7; // -1 file, +1 rank
     precomputed_king_attacks |= king << 8; // +1 rank
-    precomputed_king_attacks |= (king & ~FILE_X(8)) << 9; // +1 file, +1 rank
-    precomputed_king_attacks |= (king & ~FILE_X(8)) << 1; // +1 file
-    precomputed_king_attacks |= (king & ~FILE_X(8)) >> 7; // +1 file, -1 rank
+    precomputed_king_attacks |= (king & ~FILE_X(7)) << 9; // +1 file, +1 rank
+    precomputed_king_attacks |= (king & ~FILE_X(7)) << 1; // +1 file
+    precomputed_king_attacks |= (king & ~FILE_X(7)) >> 7; // +1 file, -1 rank
     precomputed_king_attacks |= king >> 8; // -1 rank
-    precomputed_king_attacks |= (king & ~FILE_X(1)) >> 9; // -1 file, -1 rank
-    precomputed_king_attacks |= (king & ~FILE_X(1)) >> 1; // -1 file
+    precomputed_king_attacks |= (king & ~FILE_X(0)) >> 9; // -1 file, -1 rank
+    precomputed_king_attacks |= (king & ~FILE_X(0)) >> 1; // -1 file
     
     // Return the precomputed king moves
     return precomputed_king_attacks;
@@ -156,8 +156,8 @@ static inline int is_square_attacked(const Position* pos, int sq, int attacking_
     Bitboard pawns = pos->pieces[attacking_side == WHITE ? WP : BP];
     // Initialize a bitboard for all pawn attacks from the given square
     Bitboard pawn_attackers = (attacking_side == WHITE)
-        ? (((1ULL << sq) & ~FILE_X(8)) >> 7) | (((1ULL << sq) & ~FILE_X(1)) >> 9)
-        : (((1ULL << sq) & ~FILE_X(1)) << 7) | (((1ULL << sq) & ~FILE_X(8)) << 9);
+        ? (((1ULL << sq) & ~FILE_X(7)) >> 7) | (((1ULL << sq) & ~FILE_X(0)) >> 9)
+        : (((1ULL << sq) & ~FILE_X(0)) << 7) | (((1ULL << sq) & ~FILE_X(7)) << 9);
 
 
     if (pawns & pawn_attackers) {
@@ -251,13 +251,13 @@ static inline Bitboard get_attackers_to(const Position* pos, int sq, Bitboard oc
     if (sq >= 0 && sq < 64) {
         // White pawns attack like black
         Bitboard white_pawn_attackers =
-            ((sq_bb & ~FILE_X(8)) >> 7) |
-            ((sq_bb & ~FILE_X(1)) >> 9);
+            ((sq_bb & ~FILE_X(7)) >> 7) |
+            ((sq_bb & ~FILE_X(0)) >> 9);
 
         // Black pawns attack like white
         Bitboard black_pawn_attackers =
-            ((sq_bb & ~FILE_X(1)) << 7) |
-            ((sq_bb & ~FILE_X(8)) << 9);
+            ((sq_bb & ~FILE_X(0)) << 7) |
+            ((sq_bb & ~FILE_X(7)) << 9);
 
         attackers |= pos->pieces[WP] & white_pawn_attackers;
         attackers |= pos->pieces[BP] & black_pawn_attackers;
@@ -302,7 +302,7 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
     // Get the enemy king bitboard
     Bitboard enemy_king = pos->pieces[side ? WK : BK];
     // Set promotion rank
-    Rank promotion_rank = (side == WHITE) ? (RANK_X(8)) : (RANK_X(1));
+    Rank promotion_rank = (side == WHITE) ? (RANK_X(7)) : (RANK_X(0));
     // Set forward direction
     int forward = (side == WHITE) ? (8) : (-8);
     // Set left direction (for captures)
@@ -333,8 +333,8 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
 
     // Double push every pawn on the bitboard if the pawn is on the 2nd (white) or 7th (black) rank and both of the two squares in front are empty
     Bitboard double_pushes = (side == WHITE)
-        ? ((((pawns & RANK_X(2)) << 8) & empty) << 8) & empty
-        : ((((pawns & RANK_X(7)) >> 8) & empty) >> 8) & empty;
+        ? ((((pawns & RANK_X(1)) << 8) & empty) << 8) & empty
+        : ((((pawns & RANK_X(6)) >> 8) & empty) >> 8) & empty;
     
     // For each generated double push on the bitboard
     while(double_pushes) {
@@ -352,8 +352,8 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
 
     // Compute left captures for every pawn on the bitboard if the square diagonally left is occupied by an opponent's piece, is not the enemy king, and is not on the promotion rank
     Bitboard non_promo_left_captures = (side == WHITE)
-        ? (pawns & ~FILE_X(1)) << 7 & opp & ~enemy_king & ~promotion_rank
-        : (pawns & ~FILE_X(1)) >> 9 & opp & ~enemy_king & ~promotion_rank;
+        ? (pawns & ~FILE_X(0)) << 7 & opp & ~enemy_king & ~promotion_rank
+        : (pawns & ~FILE_X(0)) >> 9 & opp & ~enemy_king & ~promotion_rank;
     
     // For each generated left capture on the bitboard
     while(non_promo_left_captures) {
@@ -371,8 +371,8 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
 
     // Compute right captures for every pawn on the bitboard if the square diagonally right is occupied by an opponent's piece, is not the enemy king, and is not on the promotion rank
     Bitboard non_promo_right_captures = (side == WHITE)
-        ? (pawns & ~FILE_X(8)) << 9 & opp & ~enemy_king & ~promotion_rank
-        : (pawns & ~FILE_X(8)) >> 7 & opp & ~enemy_king & ~promotion_rank;
+        ? (pawns & ~FILE_X(7)) << 9 & opp & ~enemy_king & ~promotion_rank
+        : (pawns & ~FILE_X(7)) >> 7 & opp & ~enemy_king & ~promotion_rank;
     
     // For each generated right capture on the bitboard
     while(non_promo_right_captures) {
@@ -412,8 +412,8 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
 
     // Compute left capture promotions for every pawn on the bitboard if the square diagonally left is occupied by an opponent's piece, is not the enemy king, and is on the promotion rank
     Bitboard left_cap_promotions = (side == WHITE)
-        ? (pawns & ~FILE_X(1)) << 7 & opp & ~enemy_king & promotion_rank
-        : (pawns & ~FILE_X(1)) >> 9 & opp & ~enemy_king & promotion_rank;
+        ? (pawns & ~FILE_X(0)) << 7 & opp & ~enemy_king & promotion_rank
+        : (pawns & ~FILE_X(0)) >> 9 & opp & ~enemy_king & promotion_rank;
     
     // For each generated left capture promotion on the bitboard
     while(left_cap_promotions) {
@@ -434,8 +434,8 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
 
     // Compute right capture promotions for every pawn on the bitboard if the square diagonally right is occupied by an opponent's piece, is not the enemy king, and is on the promotion rank
     Bitboard right_cap_promotions = (side == WHITE)
-        ? (pawns & ~FILE_X(8)) << 9 & opp & ~enemy_king & promotion_rank
-        : (pawns & ~FILE_X(8)) >> 7 & opp & ~enemy_king & promotion_rank;
+        ? (pawns & ~FILE_X(7)) << 9 & opp & ~enemy_king & promotion_rank
+        : (pawns & ~FILE_X(7)) >> 7 & opp & ~enemy_king & promotion_rank;
     
     // For each generated right capture promotion on the bitboard
     while(right_cap_promotions) {
@@ -461,8 +461,8 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
 
         // Left-capturing en passant moves
         Bitboard ep_left = (side == WHITE)
-            ? (pawns & ~FILE_X(1)) << 7
-            : (pawns & ~FILE_X(1)) >> 9;
+            ? (pawns & ~FILE_X(0)) << 7
+            : (pawns & ~FILE_X(0)) >> 9;
         
         // Check if the pawn that left-captured en passant occupies the en passant square
         if (ep_left & ep_square) {
@@ -473,8 +473,8 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
         
         // Right-capturing en passant moves
         Bitboard ep_right = (side == WHITE)
-            ? (pawns & ~FILE_X(8)) << 9
-            : (pawns & ~FILE_X(8)) >> 7;
+            ? (pawns & ~FILE_X(7)) << 9
+            : (pawns & ~FILE_X(7)) >> 7;
 
         // Check if the pawn that right-captured en passant occupies the en passant square
         if (ep_right & ep_square) {

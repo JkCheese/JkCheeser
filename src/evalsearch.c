@@ -19,7 +19,7 @@ const int futility_margin[] = {
     0, 100, 250, 400
 };
 
-#define PHASE_MAX 16
+#define PHASE_MAX 24
 
 const int phase_values[6] = {
     0, // Pawn
@@ -30,13 +30,13 @@ const int phase_values[6] = {
     0  // King
 };
 
-const int mg_value[6] = {
-    82, 337, 365, 477, 1025, 0
-}; // Middlegame
+// const int mg_value[6] = {
+//     82, 337, 365, 477, 1025, 0
+// }; // Middlegame
 
-const int eg_value[6] = {
-    94, 281, 297, 512, 936, 0
-}; // Endgame
+// const int eg_value[6] = {
+//     94, 281, 297, 512, 936, 0
+// }; // Endgame
 
 const int pawn_pst_mg[64] = {
     0,   0,   0,   0,   0,   0,  0,   0,
@@ -170,6 +170,17 @@ const int king_pst_eg[64] = {
     -74, -35, -18, -18, -11,  15,   4, -17
 };
 
+EvalParams params = {
+    // Piece values
+    {82, 337, 365, 477, 1025, 0}, // Middlegame
+    {94, 281, 297, 512, 936, 0}, // Endgame
+};
+
+const EvalParamsDouble base_params = {
+    .mg_value = {82, 337, 365, 477, 1025, 0},
+    .eg_value = {94, 281, 297, 512, 936, 0}
+};
+
 #define MAX_REP_HISTORY 1024
 uint64_t repetition_table[MAX_REP_HISTORY];
 int repetition_index = 0;
@@ -185,8 +196,7 @@ bool is_threefold_repetition(uint64_t hash) {
 }
 
 int compute_phase(const Position* pos) {
-    int phase = PHASE_MAX;
-
+    int phase = 0;
     for (int sq = 0; sq < 64; sq++) {
         int piece = get_piece_on_square(pos, sq);
         if (piece == -1) continue;
@@ -194,10 +204,9 @@ int compute_phase(const Position* pos) {
         int type = piece % 6;
         if (type == P || type == K) continue;
 
-        phase -= phase_values[type];
+        phase += phase_values[type];
     }
 
-    if (phase < 0) phase = 0;
     if (phase > PHASE_MAX) phase = PHASE_MAX;
     return phase;
 }
@@ -250,7 +259,7 @@ int move_order_heuristic(const Position* pos, int move, int ply) {
     return history_table[from][to];
 }
 
-int evaluation(const Position* pos) {
+int evaluation(const Position* pos, EvalParams* params, const MagicData* magic) {
     int mg_score = 0;
     int eg_score = 0;
 
@@ -262,11 +271,11 @@ int evaluation(const Position* pos) {
 
         int color = (piece < 6) ? WHITE : BLACK;
         int type = piece % 6;
-        int sq_mirrored = (color == WHITE) ? sq : ((sq ^ 56)); // flip vertically
+        int sq_mirrored = (color == WHITE) ? sq : mirror(sq); // flip vertically
 
         // Material + PST
-        int mg = mg_value[type];
-        int eg = eg_value[type];
+        int mg = params->mg_value[type];
+        int eg = params->eg_value[type];
 
         switch (type) {
             case P:
@@ -305,7 +314,17 @@ int evaluation(const Position* pos) {
     }
 
     // Interpolate final score
+    // printf("My evaluation: %d\n", (mg_score * phase + eg_score * (256 - phase)) >> 8);
     return (mg_score * phase + eg_score * (256 - phase)) >> 8;
+}
+
+int evaluation_with_double(const Position* pos, const EvalParamsDouble* dparams, const MagicData* magic) {
+    EvalParams iparams;
+    for (int i = 0; i < 6; i++) {
+        iparams.mg_value[i] = (int)(dparams->mg_value[i] + 0.5);  // round double to nearest int
+        iparams.eg_value[i] = (int)(dparams->eg_value[i] + 0.5);
+    }
+    return evaluation(pos, &iparams, magic);
 }
 
 int see(const Position* pos, int move, const MagicData* magic) {
@@ -367,7 +386,7 @@ int see(const Position* pos, int move, const MagicData* magic) {
     return gain[0];
 }
 
-int quiescence(Position* pos, int alpha, int beta, const MagicData* magic, ZobristKeys* keys) {
+int quiescence(Position* pos, int alpha, int beta, EvalParams* params, const MagicData* magic, ZobristKeys* keys) {
 
     // if (is_threefold_repetition(pos->zobrist_hash)) {
     //     return 0;
@@ -375,7 +394,7 @@ int quiescence(Position* pos, int alpha, int beta, const MagicData* magic, Zobri
     // int old_index = repetition_index;
     // repetition_table[repetition_index++] = pos->zobrist_hash;
 
-    int stand_pat = evaluation(pos);
+    int stand_pat = evaluation(pos, params, magic);
 
     if (stand_pat >= beta)
         return beta;  // fail-hard beta cutoff
@@ -436,7 +455,7 @@ int quiescence(Position* pos, int alpha, int beta, const MagicData* magic, Zobri
         if (!make_move(pos, &state, move, keys))
             continue;
 
-        int score = -quiescence(pos, -beta, -alpha, magic, keys);
+        int score = -quiescence(pos, -beta, -alpha, params, magic, keys);
 
         unmake_move(pos, &state, keys);
 
@@ -451,14 +470,14 @@ int quiescence(Position* pos, int alpha, int beta, const MagicData* magic, Zobri
     return alpha;
 }
 
-int search(Position* pos, int depth, int ply, int alpha, int beta, const MagicData* magic, ZobristKeys* keys) {
+int search(Position* pos, int depth, int ply, int alpha, int beta, EvalParams* params, const MagicData* magic, ZobristKeys* keys) {
     int original_alpha = alpha;
     int best_move = 0;
     int stand_pat = 0;
 
     // Threefold repetition check
     if (is_threefold_repetition(pos->zobrist_hash)) {
-        int eval = evaluation(pos);
+        int eval = evaluation(pos, params, magic);
         return eval > 0 ? -50 : 0; // Draw score
     }
 
@@ -476,13 +495,13 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, const MagicDa
     // Leaf node → Quiescence
     if (depth == 0) {
         repetition_index = old_index;
-        return quiescence(pos, alpha, beta, magic, keys);
+        return quiescence(pos, alpha, beta, params, magic, keys);
     }
 
     // Null Move Pruning
     if (depth >= 3 && !is_in_check(pos, pos->side_to_move, magic)) {
         make_null_move(pos, keys);
-        int score = -search(pos, depth - 3, ply + 1, -beta, -beta + 1, magic, keys); // null reduction = 2
+        int score = -search(pos, depth - 3, ply + 1, -beta, -beta + 1, params, magic, keys); // null reduction = 2
         unmake_null_move(pos, keys);
         if (score >= beta) {
             repetition_index = old_index;
@@ -493,7 +512,7 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, const MagicDa
     // Extended futility pruning setup
     int can_futility_prune = 0;
     if (depth <= 3 && !is_in_check(pos, pos->side_to_move, magic)) {
-        stand_pat = evaluation(pos);
+        stand_pat = evaluation(pos, params, magic);
         can_futility_prune = 1;
     }
 
@@ -543,12 +562,12 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, const MagicDa
         int score;
         if (depth >= 3 && i >= 3 && !is_capture && !is_in_check(pos, pos->side_to_move ^ 1, magic)) {
             // Late Move Reduction (LMR)
-            score = -search(pos, depth - 2, ply + 1, -alpha - 1, -alpha, magic, keys);
+            score = -search(pos, depth - 2, ply + 1, -alpha - 1, -alpha, params, magic, keys);
             if (score > alpha) {
-                score = -search(pos, depth - 1, ply + 1, -beta, -alpha, magic, keys);
+                score = -search(pos, depth - 1, ply + 1, -beta, -alpha, params, magic, keys);
             }
         } else {
-            score = -search(pos, depth - 1, ply + 1, -beta, -alpha, magic, keys);
+            score = -search(pos, depth - 1, ply + 1, -beta, -alpha, params, magic, keys);
         }
 
         unmake_move(pos, &state, keys);
@@ -592,7 +611,7 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, const MagicDa
     return best_score;
 }
 
-int find_best_move(Position* pos, int depth, const MagicData* magic, ZobristKeys* keys) {
+int find_best_move(Position* pos, int depth, EvalParams* params, const MagicData* magic, ZobristKeys* keys) {
     for (int i = 0; i < MAX_PLY; i++) {
         killer_moves[i][0] = 0;
         killer_moves[i][1] = 0;
@@ -626,7 +645,7 @@ int find_best_move(Position* pos, int depth, const MagicData* magic, ZobristKeys
         int move = list.moves[i];
         if (!make_move(pos, &state, move, keys)) continue;
 
-        int score = -search(pos, depth - 1, 1, -MATE_SCORE, MATE_SCORE, magic, keys);
+        int score = -search(pos, depth - 1, 1, -MATE_SCORE, MATE_SCORE, params, magic, keys);
         unmake_move(pos, &state, keys);
 
         if (score > best_score) {

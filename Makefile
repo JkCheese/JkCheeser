@@ -15,7 +15,7 @@ SRC = \
 	src/zobrist.c
 
 OBJ = $(SRC:.c=.o)
-BIN = v9-tune_testing_4
+BIN = v8-testing
 
 all: $(BIN)
 

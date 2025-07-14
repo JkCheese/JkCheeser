@@ -5,51 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <math.h>
 
 clock_t start_time, end_time;
-
-double sigmoid(double x, double k) {
-    return 1.0 / (1.0 + exp(-k * x));
-}
-
-double compute_loss_with_k(const TrainingEntry* data, int n, Position* pos, MagicData* magic,
-                           EvalParamsDouble* params, double k) {
-    double total_loss = 0.0;
-
-    for (int i = 0; i < n; i++) {
-        memset(pos, 0, sizeof(Position));
-        init_position(pos, data[i].fen);
-
-        int eval_cp = evaluation_with_double(pos, params, magic);
-        if (pos->side_to_move == BLACK)
-            eval_cp = -eval_cp;
-
-        double win_prob = 1.0 / (1.0 + exp(-k * eval_cp));
-        double diff = win_prob - data[i].sf_wdl;
-
-        total_loss += diff * diff;
-    }
-
-    return (n > 0) ? total_loss / (double)n : 1e9;
-}
-
-void find_best_k(const TrainingEntry* data, int n, Position* pos, MagicData* magic, EvalParamsDouble* params) {
-    double best_k = 0.0;
-    double min_loss = 1e9;
-
-    for (double k = 0.001; k <= 0.010; k += 0.0005) {
-        double loss = compute_loss_with_k(data, n, pos, magic, params, k);
-        printf("k = %.4f, loss = %.6f\n", k, loss);
-
-        if (loss < min_loss) {
-            min_loss = loss;
-            best_k = k;
-        }
-    }
-
-    printf("\nBest k = %.4f with loss = %.6f\n", best_k, min_loss);
-}
 
 int load_training_data(const char* filename, TrainingEntry* data, int max_entries) {
     FILE* file = fopen(filename, "r");
@@ -62,112 +19,190 @@ int load_training_data(const char* filename, TrainingEntry* data, int max_entrie
     int count = 0;
 
     while (count < max_entries && fgets(line, sizeof(line), file)) {
-        line[strcspn(line, "\r\n")] = '\0'; // Strip newline
+        line[strcspn(line, "\r\n")] = '\0';
 
-        char* bracket = strchr(line, '[');
-        if (!bracket) continue;
+        char* tab_pos = strchr(line, '\t');
+        if (!tab_pos) continue;
 
-        *bracket = '\0';  // Null-terminate FEN part
+        size_t fen_len = tab_pos - line;
+        if (fen_len >= MAX_FEN_LEN) continue;
 
-        double wdl = atof(bracket + 1);  // Parse WDL score inside brackets
+        strncpy(data[count].fen, line, fen_len);
+        data[count].fen[fen_len] = '\0';
 
-        if (wdl < 0.0 || wdl > 1.0) continue;  // Skip invalid lines
-
-        if (strlen(line) >= MAX_FEN_LEN) continue;
-
-        strncpy(data[count].fen, line, MAX_FEN_LEN - 1);
-        data[count].fen[MAX_FEN_LEN - 1] = '\0';
-        data[count].sf_wdl = wdl;
+        data[count].sf_eval = atoi(tab_pos + 1);
 
         count++;
     }
 
     fclose(file);
-    return count;
+    return count;  // number of entries loaded
+}
+
+// Parse one line of "FEN\tEvaluation"
+int parse_line(const char* line, char* fen_out, int* eval_out) {
+    const char* tab_pos = strchr(line, '\t');
+    if (!tab_pos) return 0;
+
+    size_t fen_len = tab_pos - line;
+    if (fen_len >= MAX_FEN_LEN) return 0;
+
+    strncpy(fen_out, line, fen_len);
+    fen_out[fen_len] = '\0';
+
+    *eval_out = atoi(tab_pos + 1);
+    return 1;
 }
 
 // Compute mean squared error loss over entire dataset
-double compute_loss_mem(const TrainingEntry* data, int n, Position* pos, MagicData* magic, EvalParamsDouble* params) {
-    double total_loss = 0.0;
-    const double k = 0.0085;  // Sigmoid scaling factor
+uint64_t compute_loss_mem(const TrainingEntry* data, int n, Position* pos, MagicData* magic, EvalParams* params) {
+    uint64_t total_loss = 0;
 
     for (int i = 0; i < n; i++) {
-        memset(pos, 0, sizeof(Position));
         init_position(pos, data[i].fen);
-
-        int eval_cp = evaluation_with_double(pos, params, magic);
-        if (pos->side_to_move == BLACK)
-            eval_cp = -eval_cp;
-
-        double win_prob = sigmoid((double)eval_cp, k);
-        // printf("Sigmoid calculation: %.6f\n", win_prob);
-        double diff = win_prob - data[i].sf_wdl;
-
-        total_loss += diff * diff;
+        int engine_eval = evaluation(pos, params, magic);
+        int diff = engine_eval - data[i].sf_eval;
+        total_loss += (uint64_t)diff * diff;
     }
 
-    return (n > 0) ? total_loss / (double)n : 1e9;
+    if (n > 0) {
+        return (uint64_t)(total_loss / n);
+    } else {
+        return 1000000000;  // large error if no data
+    }
 }
 
-// Safely get pointer to a parameter inside EvalParamsDouble by linear index
-double* get_param_ref(EvalParamsDouble* params, int index) {
-    if (index < 6) {
-        // printf("MG_Value: %.2f\n", params->mg_value[index]);
-        return &params->mg_value[index];
+// Safely get pointer to a parameter inside EvalParams by linear index
+int* get_param_ref(EvalParams* p, int index) {
+    if (index < 3) {
+        switch (index) {
+            case 0: return &p->king_attackers_penalty;
+            case 1: return &p->king_pawn_shield_bonus;
+            case 2: return &p->uncastled_king_penalty;
+        }
     }
-    index -= 6;
+    index -= 3;
 
-    if (index < 6) {
-        // printf("EG_Value: %.2f\n", params->eg_value[index]);
-        return &params->eg_value[index];
+    if (index < 4) {
+        switch (index) {
+            case 0: return &p->queen_tropism;
+            case 1: return &p->rook_tropism;
+            case 2: return &p->bishop_tropism;
+            case 3: return &p->knight_tropism;
+        }
     }
-    index -= 6;
+    index -= 4;
+
+    if (index < 3) {
+        switch (index) {
+            case 0: return &p->rook_open_file_bonus;
+            case 1: return &p->rook_semi_open_file_bonus;
+            case 2: return &p->rook_on_7th_bonus;
+        }
+    }
+    index -= 3;
+
+    if (index < 64) {
+        return &p->knight_outpost_pst[index];
+    }
+    index -= 64;
+
+    if (index == 0) return &p->knight_outpost_defended_bonus;
+    index--;
+
+    if (index < 4) {
+        switch (index) {
+            case 0: return &p->bishop_long_diagonal_bonus;
+            case 1: return &p->bishop_open_diagonal_bonus;
+            case 2: return &p->bishop_pair_mg;
+            case 3: return &p->bishop_pair_eg;
+        }
+    }
+    index -= 4;
+
+    if (index < 8) {
+        return &p->passed_pawn_bonus[index];
+    }
+    index -= 8;
+
+    if (index < 4) {
+        switch (index) {
+            case 0: return &p->isolated_pawn_penalty;
+            case 1: return &p->intd_pawn_penalty;
+            case 2: return &p->backward_pawn_penalty;
+            case 3: return &p->connected_passed_bonus;
+        }
+    }
+    index -= 4;
+
+    if (index == 0) return &p->space_bonus;
+    index--;
+
+    if (index == 0) return &p->piece_activity_bonus;
+    index--;
+
+    if (index < 9) {
+        return &p->knight_mobility_bonus[index];
+    }
+    index -= 9;
+
+    if (index < 15) {
+        return &p->bishop_mobility_bonus[index];
+    }
+    index -= 15;
+
+    if (index < 15) {
+        return &p->rook_mobility_bonus[index];
+    }
+    index -= 15;
+
+    if (index < 28) {
+        return &p->queen_mobility_bonus[index];
+    }
+    index -= 28;
 
     return NULL; // invalid index
 }
 
-void tune_parameters(const TrainingEntry* data, int n, Position* pos, MagicData* magic, EvalParamsDouble* params) {
+void tune_parameters(const TrainingEntry* data, int n, Position* pos, MagicData* magic, EvalParams* params) {
     const int epochs = 10;
-    const double delta = 1;
-    const double learning_rate = 0.01;
-    const double scale_factor = 100;
+    const int delta = 1;
+    const int learning_rate = 1;
+    const int scale_factor = 100;
     const int param_count = count_total_params();
 
-    for (int epoch = 0; epoch < epochs; epoch++) {
+    for (int epoch = 0; epoch < epochs; ++epoch) {
         printf("Epoch %d\n", epoch + 1);
 
-        for (int i = 0; i < param_count; i++) {
-            double* param = get_param_ref(params, i);
-            double original = *param;
+        for (int i = 0; i < param_count; ++i) {
+            int* param = get_param_ref(params, i);
+            int original = *param;
 
             *param = original + delta;
-            double loss_plus = compute_loss_mem(data, n, pos, magic, params);
+            uint64_t loss_plus = compute_loss_mem(data, n, pos, magic, params);
 
             *param = original - delta;
-            double loss_minus = compute_loss_mem(data, n, pos, magic, params);
+            uint64_t loss_minus = compute_loss_mem(data, n, pos, magic, params);
 
-            printf("Loss+: %.6f, Loss-: %.6f\n", loss_plus, loss_minus);
+            printf("Loss+: %" PRIu64 ", Loss-: %" PRIu64 "\n", loss_plus, loss_minus);
 
             // Restore original value
             *param = original;
 
-            double gradient = loss_plus - loss_minus;
-            double scaled_update = (gradient * learning_rate);
-
-            printf("Gradient: %.2f, Scaled Update: %.2f\n", gradient, scaled_update);
+            int gradient = (int)((int64_t)loss_plus - (int64_t)loss_minus);  // signed gradient
+            int scaled_update = (gradient * learning_rate) / scale_factor;         // scale factor prevents overjumping
+            printf("Gradient: %d, Scaled Update: %d\n", gradient, scaled_update);
 
             *param = original - scaled_update;
 
-            printf("\n\nParam[%d] = %.2f (grad = %.2f, update = %.2f)\n\n", i, *param, gradient, scaled_update);
+            printf("  Param[%d] = %d (grad = %d, update = %d)\n", i, *param, gradient, scaled_update);
         }
 
-        double epoch_loss = compute_loss_mem(data, n, pos, magic, params);
-        printf("Epoch %d loss: %.6f\n\n", epoch + 1, epoch_loss);
+        uint64_t epoch_loss = compute_loss_mem(data, n, pos, magic, params);
+        printf("Epoch %d loss: %" PRIu64 "\n\n", epoch + 1, epoch_loss);
     }
 
-    EvalParams rounded;
-    convert_params(params, &rounded);
-    save_params("tuned_params.bin", &rounded);
+    save_params("tuned_params.bin", params);
 }
 
 // Main tuner function called from main.c
@@ -191,20 +226,18 @@ int tuner(Position* pos, EvalParams* params, MagicData* magic, int argc, char* a
     }
 
     printf("Loaded %d training positions\n", n);
-    
-    printf("Finding most optimal k...");
 
-        // Initialize EvalParamsDouble from base_params
-        EvalParamsDouble dparams = base_params;
-        for (int i = 0; i < 6; i++) {
-            printf("Init MG[%d] = %.2f, EG[%d] = %.2f\n", i, dparams.mg_value[i], i, dparams.eg_value[i]);
-        }
-    
-    find_best_k(data, n, pos, magic, &dparams);
+    // Optional: print first few for debug
+    // for (int i = 0; i < n && i < 1000000; i++) {
+    //     init_position(pos, data[i].fen);
+    //     int engine_eval = evaluation(pos, params, magic);
+    //     int error = engine_eval - data[i].sf_eval;
+    //     printf("Sample %d: Eval error = %+d cp\n", i+1, error);
+    // }
 
     printf("\nStarting parameter tuning...\n\n");
 
-    tune_parameters(data, n, pos, magic, &dparams);
+    tune_parameters(data, n, pos, magic, params);
 
     free(data);
     return 0;
@@ -230,25 +263,72 @@ void save_params(const char* filename, EvalParams* params) {
     printf("C initializer written to tuned_params.c\n");
 }
 
-void convert_params(const EvalParamsDouble* in, EvalParams* out) {
-    for (int i = 0; i < 6; i++) {
-        out->mg_value[i] = (int)(in->mg_value[i] + 0.5);  // round to nearest
-        out->eg_value[i] = (int)(in->eg_value[i] + 0.5);
-    }
-}
-
 void print_params_as_c_file(FILE* out, const EvalParams* p) {
     fprintf(out, "EvalParams tuned_params = {\n");
 
-    fprintf(out, "    .mg_value = {");
-    for (int i = 0; i < 6; i++) {
-        fprintf(out, "%d%s", p->mg_value[i], (i == 5) ? "" : ", ");
+    fprintf(out, "    .king_attackers_penalty = %d,\n", p->king_attackers_penalty);
+    fprintf(out, "    .king_pawn_shield_bonus = %d,\n", p->king_pawn_shield_bonus);
+    fprintf(out, "    .uncastled_king_penalty = %d,\n", p->uncastled_king_penalty);
+
+    fprintf(out, "    .queen_tropism = %d,\n", p->queen_tropism);
+    fprintf(out, "    .rook_tropism = %d,\n", p->rook_tropism);
+    fprintf(out, "    .bishop_tropism = %d,\n", p->bishop_tropism);
+    fprintf(out, "    .knight_tropism = %d,\n", p->knight_tropism);
+
+    fprintf(out, "    .rook_open_file_bonus = %d,\n", p->rook_open_file_bonus);
+    fprintf(out, "    .rook_semi_open_file_bonus = %d,\n", p->rook_semi_open_file_bonus);
+    fprintf(out, "    .rook_on_7th_bonus = %d,\n", p->rook_on_7th_bonus);
+
+    fprintf(out, "    .knight_outpost_pst = {");
+    for (int i = 0; i < 64; i++) {
+        fprintf(out, "%d%s", p->knight_outpost_pst[i], (i == 63) ? "" : ", ");
     }
     fprintf(out, "},\n");
 
-    fprintf(out, "    .eg_value = {");
-    for (int i = 0; i < 6; i++) {
-        fprintf(out, "%d%s", p->eg_value[i], (i == 5) ? "" : ", ");
+    fprintf(out, "    .knight_outpost_defended_bonus = %d,\n", p->knight_outpost_defended_bonus);
+
+    fprintf(out, "    .bishop_long_diagonal_bonus = %d,\n", p->bishop_long_diagonal_bonus);
+    fprintf(out, "    .bishop_open_diagonal_bonus = %d,\n", p->bishop_open_diagonal_bonus);
+    fprintf(out, "    .bishop_pair_mg = %d,\n", p->bishop_pair_mg);
+    fprintf(out, "    .bishop_pair_eg = %d,\n", p->bishop_pair_eg);
+
+    fprintf(out, "    .passed_pawn_bonus = {");
+    for (int i = 0; i < 8; i++) {
+        fprintf(out, "%d%s", p->passed_pawn_bonus[i], (i == 7) ? "" : ", ");
     }
     fprintf(out, "},\n");
+
+    fprintf(out, "    .isolated_pawn_penalty = %d,\n", p->isolated_pawn_penalty);
+    fprintf(out, "    .intd_pawn_penalty = %d,\n", p->intd_pawn_penalty);
+    fprintf(out, "    .backward_pawn_penalty = %d,\n", p->backward_pawn_penalty);
+    fprintf(out, "    .connected_passed_bonus = %d,\n", p->connected_passed_bonus);
+
+    fprintf(out, "    .space_bonus = %d,\n", p->space_bonus);
+    fprintf(out, "    .piece_activity_bonus = %d,\n", p->piece_activity_bonus);
+
+    fprintf(out, "    .knight_mobility_bonus = {");
+    for (int i = 0; i < 9; i++) {
+        fprintf(out, "%d%s", p->knight_mobility_bonus[i], (i == 8) ? "" : ", ");
+    }
+    fprintf(out, "},\n");
+
+    fprintf(out, "    .bishop_mobility_bonus = {");
+    for (int i = 0; i < 15; i++) {
+        fprintf(out, "%d%s", p->bishop_mobility_bonus[i], (i == 14) ? "" : ", ");
+    }
+    fprintf(out, "},\n");
+
+    fprintf(out, "    .rook_mobility_bonus = {");
+    for (int i = 0; i < 15; i++) {
+        fprintf(out, "%d%s", p->rook_mobility_bonus[i], (i == 14) ? "" : ", ");
+    }
+    fprintf(out, "},\n");
+
+    fprintf(out, "    .queen_mobility_bonus = {");
+    for (int i = 0; i < 28; i++) {
+        fprintf(out, "%d%s", p->queen_mobility_bonus[i], (i == 27) ? "" : ", ");
+    }
+    fprintf(out, "}\n");
+
+    fprintf(out, "};\n");
 }

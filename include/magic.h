@@ -4,6 +4,7 @@
 #include "board.h"
 #include <stdint.h>
 
+#define Bitboard uint64_t
 #define MAX_ROOK_MOVES 4096
 #define MAX_BISHOP_MOVES 512
 #define MAX_BLOCKER_VARIATIONS 4096

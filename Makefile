@@ -4,7 +4,9 @@ CFLAGS = -Wall -Wextra -std=c11 -Iinclude -O3 -march=native
 SRC = \
 	src/board.c \
 	src/engine.c \
+	src/evalparams.c \
 	src/evalsearch.c \
+	src/evaltuner.c \
 	src/moveformat.c \
 	src/movegen.c \
 	src/magic.c \
@@ -15,15 +17,15 @@ SRC = \
 	src/zobrist.c
 
 OBJ = $(SRC:.c=.o)
-BIN = v8-testing
+BIN = v9-tune_testing_5
 
 all: $(BIN)
 
 $(BIN): $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
 
-run:
-	./$(BIN)
+run: $(BIN)
+	./$(BIN) lichess-big3-resolved.book tuned_params
 
 clean:
 	rm -f src/*.o $(BIN)

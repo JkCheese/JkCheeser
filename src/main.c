@@ -1,12 +1,12 @@
 #include "board.h"
 #include "evalsearch.h"
+#include "evaltuner.h"
 #include "engine.h"
 #include "magic.h"
 #include "moveformat.h"
 #include "movegen.h"
 #include "operations.h"
 #include "test.h"
-#include "tune.h"
 #include "uci.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,7 +21,7 @@
 
 int depth = 6;
 
-int main(int argc, char* argv[]) {
+int main(int argc, char** argv) {
     MagicData* magic = malloc(sizeof(MagicData));
     if (!magic) {
         fprintf(stderr, "Failed to allocate MagicData\n");
@@ -38,11 +38,36 @@ int main(int argc, char* argv[]) {
     Position pos;
     MoveState state;
     MoveList list;
-    EvalParams params;
-    EvalParamsDouble dparams;
 
-    // uci_loop(&pos, &list, &state, depth, &params, magic, keys);
-    tuner(&pos, &params, magic, argc, argv);
+    // const char* start_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    // init_position(&pos, start_fen);
+
+    // EvalParamsDouble params;
+    // init_double_params(&params);
+
+    // EvalResult result = evaluate_with_features(&pos, &params, magic);
+
+    // printf("Evaluation score: %.2f centipawns\n", result.score);
+
+    // printf("Detected %d features:\n", result.num_features);
+    // int zero_weight_features = 0;
+    // for (int i = 0; i < result.num_features; i++) {
+    //     int idx = result.features[i].index;
+    //     double weight = result.features[i].weight;
+    //     if (weight == 0)  {
+    //         zero_weight_features++;
+    //         continue;
+    //     } 
+    //     printf("  Feature index %4d | weight %+7.4f\n", idx, weight);
+    // }
+    // printf("Detected %d non-zero weighted features\n", result.num_features - zero_weight_features);
+
+    // uci_loop(&pos, &list, &state, depth, magic, keys);
+    if (argc >= 3) {
+        run_tuner_main(argv[1], argv[2], magic);
+    } else {
+        fprintf(stderr, "Usage: %s <dataset.txt> <output_prefix>\n", argv[0]);
+    }
     free(magic);
     free(keys);
     return 0;

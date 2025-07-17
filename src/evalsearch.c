@@ -1,5 +1,6 @@
 #include "board.h"
 #include "evalsearch.h"
+#include "evalparams.h"
 #include "movegen.h"
 #include "tt.h"
 #include "zobrist.h"
@@ -30,157 +31,6 @@ const int phase_values[6] = {
     0  // King
 };
 
-// const int mg_value[6] = {
-//     82, 337, 365, 477, 1025, 0
-// }; // Middlegame
-
-// const int eg_value[6] = {
-//     94, 281, 297, 512, 936, 0
-// }; // Endgame
-
-const int pawn_pst_mg[64] = {
-    0,   0,   0,   0,   0,   0,  0,   0,
-    -35,  -1, -20, -23, -15,  24, 38, -22,
-    -26,  -4,  -4, -10,   3,   3, 33, -12,
-    -27,  -2,  -5,  12,  17,   6, 10, -25,
-    -14,  13,   6,  21,  23,  12, 17, -23,
-    -6,   7,  26,  31,  65,  56, 25, -20,
-    98, 134,  61,  95,  68, 126, 34, -11,
-      0,   0,   0,   0,   0,   0,  0,   0
-};
-
-const int pawn_pst_eg[64] = {
-    0,   0,   0,   0,   0,   0,   0,   0,
-    13,   8,   8,  10,  13,   0,   2,  -7,
-    4,   7,  -6,   1,   0,  -5,  -1,  -8,
-    13,   9,  -3,  -7,  -7,  -8,   3,  -1,
-    32,  24,  13,   5,  -2,   4,  17,  17,
-    94, 100,  85,  67,  56,  53,  82,  84,
-    178, 173, 158, 134, 147, 132, 165, 187,
-      0,   0,   0,   0,   0,   0,   0,   0
-};
-
-const int knight_pst_mg[64] = {
-    -105, -21, -58, -33, -17, -28, -19,  -23,
-    -29, -53, -12,  -3,  -1,  18, -14,  -19,
-    -23,  -9,  12,  10,  19,  17,  25,  -16,
-    -13,   4,  16,  13,  28,  19,  21,   -8,
-    -9,  17,  19,  53,  37,  69,  18,   22,
-    -47,  60,  37,  65,  84, 129,  73,   44,
-    -73, -41,  72,  36,  23,  62,   7,  -17,
-    -167, -89, -34, -49,  61, -97, -15, -107
-};
-
-const int knight_pst_eg[64] = {
-    -29, -51, -23, -15, -22, -18, -50, -64,
-    -42, -20, -10,  -5,  -2, -20, -23, -44,
-    -23,  -3,  -1,  15,  10,  -3, -20, -22,
-    -18,  -6,  16,  25,  16,  17,   4, -18,
-    -17,   3,  22,  22,  22,  11,   8, -18,
-    -24, -20,  10,   9,  -1,  -9, -19, -41,
-    -25,  -8, -25,  -2,  -9, -25, -24, -52,
-    -58, -38, -13, -28, -31, -27, -63, -99
-};
-
-const int bishop_pst_mg[64] = {
-    -33,  -3, -14, -21, -13, -12, -39, -21,
-    4,  15,  16,   0,   7,  21,  33,   1,
-    0,  15,  15,  15,  14,  27,  18,  10,
-    -6,  13,  13,  26,  34,  12,  10,   4,
-    -4,   5,  19,  50,  37,  37,   7,  -2,
-    -16,  37,  43,  40,  35,  50,  37,  -2,
-    -26,  16, -18, -13,  30,  59,  18, -47,
-    -29,   4, -82, -37, -25, -42,   7,  -8
-};
-
-const int bishop_pst_eg[64] = {
-    -23,  -9, -23,  -5, -9, -16,  -5, -17,
-    -14, -18,  -7,  -1,  4,  -9, -15, -27,
-    -12,  -3,   8,  10, 13,   3,  -7, -15,
-    -6,   3,  13,  19,  7,  10,  -3,  -9,
-    -3,   9,  12,   9, 14,  10,   3,   2,
-    2,  -8,   0,  -1, -2,   6,   0,   4,
-    -8,  -4,   7, -12, -3, -13,  -4, -14,
-    -14, -21, -11,  -8, -7,  -9, -17, -24
-};
-
-const int rook_pst_mg[64] = {
-    -19, -13,   1,  17, 16,  7, -37, -26,
-    -44, -16, -20,  -9, -1, 11,  -6, -71,
-    -45, -25, -16, -17,  3,  0,  -5, -33,
-    -36, -26, -12,  -1,  9, -7,   6, -23,
-    -24, -11,   7,  26, 24, 35,  -8, -20,
-    -5,  19,  26,  36, 17, 45,  61,  16,
-    27,  32,  58,  62, 80, 67,  26,  44,
-    32,  42,  32,  51, 63,  9,  31,  43
-};
-
-const int rook_pst_eg[64] = {
-    -9,  2,  3, -1, -5, -13,   4, -20,
-    -6, -6,  0,  2, -9,  -9, -11,  -3,
-    -4,  0, -5, -1, -7, -12,  -8, -16,
-    3,  5,  8,  4, -5,  -6,  -8, -11,
-    4,  3, 13,  1,  2,   1,  -1,   2,
-    7,  7,  7,  5,  4,  -3,  -5,  -3,
-    11, 13, 13, 11, -3,   3,   8,   3,
-    13, 10, 18, 15, 12,  12,   8,   5
-};
-
-const int queen_pst_mg[64] = {
-    -1, -18,  -9,  10, -15, -25, -31, -50,
-    -35,  -8,  11,   2,   8,  15,  -3,   1,
-    -14,   2, -11,  -2,  -5,   2,  14,   5,
-    -9, -26,  -9, -10,  -2,  -4,   3,  -3,
-    -27, -27, -16, -16,  -1,  17,  -2,   1,
-    -13, -17,   7,   8,  29,  56,  47,  57,
-    -24, -39,  -5,   1, -16,  57,  28,  54,
-    -28,   0,  29,  12,  59,  44,  43,  45
-};
-
-const int queen_pst_eg[64] = {
-    -33, -28, -22, -43,  -5, -32, -20, -41,
-    -22, -23, -30, -16, -16, -23, -36, -32,
-    -16, -27,  15,   6,   9,  17,  10,   5,
-    -18,  28,  19,  47,  31,  34,  39,  23,
-    3,  22,  24,  45,  57,  40,  57,  36,
-    -20,   6,   9,  49,  47,  35,  19,   9,
-    -17,  20,  32,  41,  58,  25,  30,   0,
-    -9,  22,  22,  27,  27,  19,  10,  20
-};
-
-const int king_pst_mg[64] = {
-    -15,  36,  12, -54,   8, -28,  24,  14,
-    1,   7,  -8, -64, -43, -16,   9,   8,
-    -14, -14, -22, -46, -44, -30, -15, -27,
-    -49,  -1, -27, -39, -46, -44, -33, -51,
-    -17, -20, -12, -27, -30, -25, -14, -36,
-    -9,  24,   2, -16, -20,   6,  22, -22,
-    29,  -1, -20,  -7,  -8,  -4, -38, -29,
-    -65,  23,  16, -15, -56, -34,   2,  13
-};
-
-const int king_pst_eg[64] = {
-    -53, -34, -21, -11, -28, -14, -24, -43,
-    -27, -11,   4,  13,  14,   4,  -5, -17,
-    -19,  -3,  11,  21,  23,  16,   7,  -9,
-    -18,  -4,  21,  24,  27,  23,   9, -11,
-    -8,  22,  24,  27,  26,  33,  26,   3,
-    10,  17,  23,  15,  20,  45,  44,  13,
-    -12,  17,  14,  17,  17,  38,  23,  11,
-    -74, -35, -18, -18, -11,  15,   4, -17
-};
-
-EvalParams params = {
-    // Piece values
-    {82, 337, 365, 477, 1025, 0}, // Middlegame
-    {94, 281, 297, 512, 936, 0}, // Endgame
-};
-
-const EvalParamsDouble base_params = {
-    .mg_value = {82, 337, 365, 477, 1025, 0},
-    .eg_value = {94, 281, 297, 512, 936, 0}
-};
-
 #define MAX_REP_HISTORY 1024
 uint64_t repetition_table[MAX_REP_HISTORY];
 int repetition_index = 0;
@@ -196,7 +46,8 @@ bool is_threefold_repetition(uint64_t hash) {
 }
 
 int compute_phase(const Position* pos) {
-    int phase = 0;
+    int phase = PHASE_MAX;
+
     for (int sq = 0; sq < 64; sq++) {
         int piece = get_piece_on_square(pos, sq);
         if (piece == -1) continue;
@@ -204,9 +55,10 @@ int compute_phase(const Position* pos) {
         int type = piece % 6;
         if (type == P || type == K) continue;
 
-        phase += phase_values[type];
+        phase -= phase_values[type];
     }
 
+    if (phase < 0) phase = 0;
     if (phase > PHASE_MAX) phase = PHASE_MAX;
     return phase;
 }
@@ -259,72 +111,68 @@ int move_order_heuristic(const Position* pos, int move, int ply) {
     return history_table[from][to];
 }
 
-int evaluation(const Position* pos, EvalParams* params, const MagicData* magic) {
-    int mg_score = 0;
-    int eg_score = 0;
-
-    int phase = compute_phase(pos) * 256 / PHASE_MAX;
+int evaluation(const Position* pos, const EvalParams* params, const MagicData* magic) {
+    int mg = 0, eg = 0;
+    int phase = 0;
 
     for (int sq = 0; sq < 64; sq++) {
         int piece = get_piece_on_square(pos, sq);
         if (piece == -1) continue;
 
-        int color = (piece < 6) ? WHITE : BLACK;
+        int side = (piece < 6) ? WHITE : BLACK;
         int type = piece % 6;
-        int sq_mirrored = (color == WHITE) ? sq : mirror(sq); // flip vertically
+        int mirrored_sq = (side == WHITE) ? sq : (56 ^ (sq & 56)) | (sq & 7);
 
-        // Material + PST
-        int mg = params->mg_value[type];
-        int eg = params->eg_value[type];
+        // Use PSTs and values from params
+        int mg_val = params->mg_value[type];
+        int eg_val = params->eg_value[type];
 
+        int mg_pst = 0, eg_pst = 0;
         switch (type) {
             case P:
-                mg += pawn_pst_mg[sq_mirrored];
-                eg += pawn_pst_eg[sq_mirrored];
+                mg_pst = params->pawn_pst_mg[mirrored_sq];
+                eg_pst = params->pawn_pst_eg[mirrored_sq];
+                phase += 0;
                 break;
             case N:
-                mg += knight_pst_mg[sq_mirrored];
-                eg += knight_pst_eg[sq_mirrored];
+                mg_pst = params->knight_pst_mg[mirrored_sq];
+                eg_pst = params->knight_pst_eg[mirrored_sq];
+                phase += 1;
                 break;
             case B:
-                mg += bishop_pst_mg[sq_mirrored];
-                eg += bishop_pst_eg[sq_mirrored];
+                mg_pst = params->bishop_pst_mg[mirrored_sq];
+                eg_pst = params->bishop_pst_eg[mirrored_sq];
+                phase += 1;
                 break;
             case R:
-                mg += rook_pst_mg[sq_mirrored];
-                eg += rook_pst_eg[sq_mirrored];
+                mg_pst = params->rook_pst_mg[mirrored_sq];
+                eg_pst = params->rook_pst_eg[mirrored_sq];
+                phase += 2;
                 break;
             case Q:
-                mg += queen_pst_mg[sq_mirrored];
-                eg += queen_pst_eg[sq_mirrored];
+                mg_pst = params->queen_pst_mg[mirrored_sq];
+                eg_pst = params->queen_pst_eg[mirrored_sq];
+                phase += 4;
                 break;
             case K:
-                mg += king_pst_mg[sq_mirrored];
-                eg += king_pst_eg[sq_mirrored];
+                mg_pst = params->king_pst_mg[mirrored_sq];
+                eg_pst = params->king_pst_eg[mirrored_sq];
+                break;
         }
 
-        // Add to score with sign depending on color
-        if (color == pos->side_to_move) {
-            mg_score += mg;
-            eg_score += eg;
-        } else {
-            mg_score -= mg;
-            eg_score -= eg;
-        }
+        int mg_score = mg_val + mg_pst;
+        int eg_score = eg_val + eg_pst;
+
+        mg += (side == pos->side_to_move) ? mg_score : -mg_score;
+        eg += (side == pos->side_to_move) ? eg_score : -eg_score;
     }
 
-    // Interpolate final score
-    // printf("My evaluation: %d\n", (mg_score * phase + eg_score * (256 - phase)) >> 8);
-    return (mg_score * phase + eg_score * (256 - phase)) >> 8;
-}
+    // Cap the phase to 24 (max material)
+    if (phase > 24) phase = 24;
 
-int evaluation_with_double(const Position* pos, const EvalParamsDouble* dparams, const MagicData* magic) {
-    EvalParams iparams;
-    for (int i = 0; i < 6; i++) {
-        iparams.mg_value[i] = (int)(dparams->mg_value[i] + 0.5);  // round double to nearest int
-        iparams.eg_value[i] = (int)(dparams->eg_value[i] + 0.5);
-    }
-    return evaluation(pos, &iparams, magic);
+    // Interpolate between middlegame and endgame scores
+    int score = (mg * phase + eg * (24 - phase)) / 24;
+    return score;
 }
 
 int see(const Position* pos, int move, const MagicData* magic) {
@@ -386,7 +234,7 @@ int see(const Position* pos, int move, const MagicData* magic) {
     return gain[0];
 }
 
-int quiescence(Position* pos, int alpha, int beta, EvalParams* params, const MagicData* magic, ZobristKeys* keys) {
+int quiescence(Position* pos, int alpha, int beta, const EvalParams* params, const MagicData* magic, ZobristKeys* keys) {
 
     // if (is_threefold_repetition(pos->zobrist_hash)) {
     //     return 0;
@@ -470,7 +318,7 @@ int quiescence(Position* pos, int alpha, int beta, EvalParams* params, const Mag
     return alpha;
 }
 
-int search(Position* pos, int depth, int ply, int alpha, int beta, EvalParams* params, const MagicData* magic, ZobristKeys* keys) {
+int search(Position* pos, int depth, int ply, int alpha, int beta, const EvalParams* params, const MagicData* magic, ZobristKeys* keys) {
     int original_alpha = alpha;
     int best_move = 0;
     int stand_pat = 0;
@@ -611,7 +459,7 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, EvalParams* p
     return best_score;
 }
 
-int find_best_move(Position* pos, int depth, EvalParams* params, const MagicData* magic, ZobristKeys* keys) {
+int find_best_move(Position* pos, int depth, const EvalParams* params, const MagicData* magic, ZobristKeys* keys) {
     for (int i = 0; i < MAX_PLY; i++) {
         killer_moves[i][0] = 0;
         killer_moves[i][1] = 0;

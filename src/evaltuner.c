@@ -8,10 +8,9 @@
 #include <math.h>
 #include <stdlib.h>
 
-#define MAX_TRAINING 100000
-#define MAX_ITERATIONS 100
-#define BATCH_SIZE 100000
-#define LEARNING_RATE 1000000.0
+#define MAX_TRAINING 10000000
+#define MAX_ITERATIONS 1000
+#define LEARNING_RATE 100.0
 #define K_START 0.0005
 #define K_END 0.01
 #define K_STEP 0.0005
@@ -134,9 +133,10 @@ EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* p
         double eg_score = eg_val + eg_pst;
 
         // Apply to running totals
-        double sign = (side == pos->side_to_move) ? 1.0 : -1.0;
+        double sign = (side == WHITE) ? 1.0 : -1.0;
         mg += sign * mg_score;
         eg += sign * eg_score;
+
 
         // Add feature contributions with proper weights
         if (result.num_features + 4 < MAX_FEATURES_PER_POSITION) {
@@ -171,7 +171,6 @@ EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* p
                     (idx >= IDX_QUEEN_PST_MG && idx < IDX_QUEEN_PST_EG) ||
                     (idx >= IDX_KING_PST_MG && idx < IDX_KING_PST_EG);
         }
-        
         result.features[i].weight *= is_mg ? mg_weight : eg_weight;
     }
 
@@ -211,121 +210,13 @@ double compute_loss(const EvalParamsDouble* params, const TrainingEntry* data, i
     for (int i = 0; i < n; i++) {
         init_position(&pos, data[i].fen);
         EvalResult r = evaluate_with_features(&pos, params, magic);
-        double p = sigmoid((pos.side_to_move == WHITE ? r.score : -r.score), k);
+        double p = sigmoid(r.score, k);
         double e = p - data[i].wdl;
         loss += e * e;
     }
 
     printf("Total loss: %.6f | Average loss: %.6f\n", loss, loss / n);
     return loss / n;
-}
-
-void run_minibatch_training(
-    EvalParamsDouble* params,
-    const TrainingEntry* data,
-    int num_entries,
-    const MagicData* magic,
-    int batch_size,
-    double learning_rate,
-    int iterations,
-    double sigmoid_k
-) {
-    double* gradient = calloc(NUM_EVAL_PARAMS, sizeof(double));
-    if (!gradient) return;
-
-    Position pos;
-    
-    // Start with a more conservative learning rate
-    double current_lr = learning_rate;
-    double prev_loss = 1e9;
-
-    for (int iter = 0; iter < iterations; iter++) {
-        memset(gradient, 0, sizeof(double) * NUM_EVAL_PARAMS);
-
-        // Compute gradient over minibatch
-        for (int i = 0; i < batch_size; i++) {
-            int index = rand() % num_entries;
-            const TrainingEntry* entry = &data[index];
-
-            init_position(&pos, entry->fen);
-            EvalResult result = evaluate_with_features(&pos, params, magic);
-            
-            // Score from white's perspective
-            double white_score = (pos.side_to_move == WHITE) ? result.score : -result.score;
-            double predicted = sigmoid(white_score, sigmoid_k);
-            double error = predicted - entry->wdl;
-            double dloss_dscore = 2.0 * error * sigmoid_derivative(white_score, sigmoid_k);
-
-            // Accumulate gradients
-            for (int j = 0; j < result.num_features; j++) {
-                int idx = result.features[j].index;
-                double contribution = result.features[j].weight;
-                gradient[idx] += dloss_dscore * contribution;
-            }
-        }
-
-        // Normalize by batch size
-        for (int i = 0; i < NUM_EVAL_PARAMS; i++) {
-            gradient[i] /= batch_size;
-        }
-
-        // Apply gradient clipping to prevent exploding gradients
-        double grad_norm = compute_gradient_norm(gradient);
-        if (grad_norm > 1.0) {
-            double scale = 1.0 / grad_norm;
-            for (int i = 0; i < NUM_EVAL_PARAMS; i++) {
-                gradient[i] *= scale;
-            }
-        }
-
-        // Save current parameters
-        EvalParamsDouble backup = *params;
-
-        // Apply gradient descent update
-        for (int i = 0; i < 6; i++) {
-            params->mg_value[i] -= current_lr * gradient[IDX_MG_VALUE + i];
-            params->eg_value[i] -= current_lr * gradient[IDX_EG_VALUE + i];
-        }
-
-        #define APPLY_PST_UPDATE(field, index_base) \
-            for (int i = 0; i < 64; i++) params->field[i] -= current_lr * gradient[index_base + i];
-
-        APPLY_PST_UPDATE(pawn_pst_mg,   IDX_PAWN_PST_MG);
-        APPLY_PST_UPDATE(pawn_pst_eg,   IDX_PAWN_PST_EG);
-        APPLY_PST_UPDATE(knight_pst_mg, IDX_KNIGHT_PST_MG);
-        APPLY_PST_UPDATE(knight_pst_eg, IDX_KNIGHT_PST_EG);
-        APPLY_PST_UPDATE(bishop_pst_mg, IDX_BISHOP_PST_MG);
-        APPLY_PST_UPDATE(bishop_pst_eg, IDX_BISHOP_PST_EG);
-        APPLY_PST_UPDATE(rook_pst_mg,   IDX_ROOK_PST_MG);
-        APPLY_PST_UPDATE(rook_pst_eg,   IDX_ROOK_PST_EG);
-        APPLY_PST_UPDATE(queen_pst_mg,  IDX_QUEEN_PST_MG);
-        APPLY_PST_UPDATE(queen_pst_eg,  IDX_QUEEN_PST_EG);
-        APPLY_PST_UPDATE(king_pst_mg,   IDX_KING_PST_MG);
-        APPLY_PST_UPDATE(king_pst_eg,   IDX_KING_PST_EG);
-
-        // Check if loss improved
-        double new_loss = compute_loss(params, data, num_entries, sigmoid_k, magic);
-        
-        if (new_loss < prev_loss) {
-            // Good update, slightly increase learning rate
-            current_lr *= 1.01;
-            prev_loss = new_loss;
-            printf("Iter %d: Loss = %.6f, LR = %.6f (improved)\n", iter + 1, new_loss, current_lr);
-        } else {
-            // Bad update, revert and reduce learning rate
-            *params = backup;
-            current_lr *= 0.5;
-            printf("Iter %d: Loss = %.6f, LR = %.6f (reverted)\n", iter + 1, new_loss, current_lr);
-        }
-
-        // Early stopping conditions
-        if (current_lr < 1e-6) {
-            printf("Learning rate too small, stopping.\n");
-            break;
-        }
-    }
-
-    free(gradient);
 }
 
 void convert_params_to_integer(const EvalParamsDouble* in, EvalParams* out) {
@@ -402,6 +293,128 @@ void save_evalparams_text(const char* path, const EvalParams* p) {
     printf("Saved text params to %s\n", path);
 }
 
+void run_minibatch_training(
+    EvalParamsDouble* params,
+    const TrainingEntry* data,
+    int num_entries,
+    const MagicData* magic,
+    int batch_size,
+    double learning_rate,
+    int iterations,
+    double sigmoid_k,
+    const char* output_file
+) {
+    double* gradient = calloc(NUM_EVAL_PARAMS, sizeof(double));
+    if (!gradient) return;
+
+    Position pos;
+    
+    // Start with a more conservative learning rate
+    double current_lr = learning_rate;
+    double prev_loss = 1e9;
+
+    for (int iter = 0; iter < iterations; iter++) {
+        memset(gradient, 0, sizeof(double) * NUM_EVAL_PARAMS);
+
+        // Compute gradient over minibatch
+        for (int i = 0; i < batch_size; i++) {
+            const TrainingEntry* entry = &data[i];
+
+            init_position(&pos, entry->fen);
+            EvalResult result = evaluate_with_features(&pos, params, magic);
+
+            float i = 0.0;
+            
+            // Score from white's perspective
+            double white_score = result.score;
+            double predicted = sigmoid(white_score, sigmoid_k);
+            double error = predicted - entry->wdl;
+            double dloss_dscore = 2.0 * error * sigmoid_derivative(white_score, sigmoid_k);
+
+            // Accumulate gradients
+            for (int j = 0; j < result.num_features; j++) {
+                int idx = result.features[j].index;
+                double contribution = result.features[j].weight;
+                gradient[idx] += dloss_dscore * contribution;
+            }
+        }
+
+        // Normalize by batch size
+        for (int i = 0; i < NUM_EVAL_PARAMS; i++) {
+            gradient[i] /= batch_size;
+        }
+
+        // Apply gradient clipping to prevent exploding gradients
+        double grad_norm = compute_gradient_norm(gradient);
+        if (grad_norm > 1.0) {
+            double scale = 1.0 / grad_norm;
+            for (int i = 0; i < NUM_EVAL_PARAMS; i++) {
+                gradient[i] *= scale;
+            }
+        }
+
+        // Save current parameters
+        EvalParamsDouble backup = *params;
+
+        // Apply gradient descent update
+        for (int i = 0; i < 6; i++) {
+            params->mg_value[i] -= current_lr * gradient[IDX_MG_VALUE + i];
+            params->eg_value[i] -= current_lr * gradient[IDX_EG_VALUE + i];
+        }
+
+        #define APPLY_PST_UPDATE(field, index_base) \
+            for (int i = 0; i < 64; i++) params->field[i] -= current_lr * gradient[index_base + i];
+
+        APPLY_PST_UPDATE(pawn_pst_mg,   IDX_PAWN_PST_MG);
+        APPLY_PST_UPDATE(pawn_pst_eg,   IDX_PAWN_PST_EG);
+        APPLY_PST_UPDATE(knight_pst_mg, IDX_KNIGHT_PST_MG);
+        APPLY_PST_UPDATE(knight_pst_eg, IDX_KNIGHT_PST_EG);
+        APPLY_PST_UPDATE(bishop_pst_mg, IDX_BISHOP_PST_MG);
+        APPLY_PST_UPDATE(bishop_pst_eg, IDX_BISHOP_PST_EG);
+        APPLY_PST_UPDATE(rook_pst_mg,   IDX_ROOK_PST_MG);
+        APPLY_PST_UPDATE(rook_pst_eg,   IDX_ROOK_PST_EG);
+        APPLY_PST_UPDATE(queen_pst_mg,  IDX_QUEEN_PST_MG);
+        APPLY_PST_UPDATE(queen_pst_eg,  IDX_QUEEN_PST_EG);
+        APPLY_PST_UPDATE(king_pst_mg,   IDX_KING_PST_MG);
+        APPLY_PST_UPDATE(king_pst_eg,   IDX_KING_PST_EG);
+
+        // Check if loss improved
+        double new_loss = compute_loss(params, data, batch_size, sigmoid_k, magic);
+        
+        if (new_loss < prev_loss) {
+            // Good update, slightly increase learning rate
+            current_lr *= 1.1;
+            prev_loss = new_loss;
+            printf("Iter %d: Loss = %.6f, LR = %.6f (improved)\n", iter + 1, new_loss, current_lr);
+        } else {
+            // Bad update, revert and reduce learning rate
+            *params = backup;
+            current_lr *= 0.5;
+            printf("Iter %d: Loss = %.6f, LR = %.6f (reverted)\n", iter + 1, new_loss, current_lr);
+        }
+
+        // Early stopping conditions
+        if (current_lr < 1e-6) {
+            printf("Learning rate too small, stopping.\n");
+            break;
+        }   
+
+
+        // save params
+
+        EvalParams final;
+        convert_params_to_integer(params, &final);
+
+        char text_path[256], bin_path[256];
+        snprintf(text_path, sizeof(text_path), "%s.c", output_file);
+        snprintf(bin_path, sizeof(bin_path), "%s.bin", output_file);
+
+        save_evalparams_text(text_path, &final);
+    }
+
+    free(gradient);
+}
+
 void run_tuner_main(const char* dataset_path, const char* output_prefix, const MagicData* magic) {
     int num_entries = load_dataset(dataset_path, training_data, MAX_TRAINING);
     if (num_entries <= 0) {
@@ -414,6 +427,7 @@ void run_tuner_main(const char* dataset_path, const char* output_prefix, const M
     EvalParamsDouble params;
     init_double_params(&params);
 
+
     double k = find_best_k(&params, training_data, num_entries, magic);
 
     printf("Before training: mg_value[0] = %.3f\n", params.mg_value[0]);
@@ -423,20 +437,12 @@ void run_tuner_main(const char* dataset_path, const char* output_prefix, const M
         training_data,
         num_entries,
         magic,
-        BATCH_SIZE,
+        num_entries,
         LEARNING_RATE,
         MAX_ITERATIONS,
-        k
+        k,
+        output_prefix
     );
     
     printf("After training:  mg_value[0] = %.3f\n", params.mg_value[0]);
-    
-    EvalParams final;
-    convert_params_to_integer(&params, &final);
-
-    char text_path[256], bin_path[256];
-    snprintf(text_path, sizeof(text_path), "%s.c", output_prefix);
-    snprintf(bin_path, sizeof(bin_path), "%s.bin", output_prefix);
-
-    save_evalparams_text(text_path, &final);
 }

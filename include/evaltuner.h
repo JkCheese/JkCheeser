@@ -37,7 +37,8 @@ void run_minibatch_training(
     int batch_size,
     double learning_rate,
     int iterations,
-    double sigmoid_k
+    double sigmoid_k,
+    const char* output_file
 );
 void convert_params_to_integer(const EvalParamsDouble* in, EvalParams* out);
 void save_evalparams_text(const char* path, const EvalParams* p);

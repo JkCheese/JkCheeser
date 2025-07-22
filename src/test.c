@@ -14,7 +14,7 @@ bool is_position_valid(const Position* pos) {
     return true;
 }
 
-uint64_t perft_debug(Position* pos, int depth, const MagicData* magic, const ZobristKeys* keys) {
+uint64_t perft_debug(Position* pos, int depth, const MagicData* magic, ZobristKeys* keys) {
     if (depth == 0) return 1;
 
     // printf("[DEBUG] Before move - Occupied bitboard:\n");
@@ -98,7 +98,7 @@ uint64_t perft_debug(Position* pos, int depth, const MagicData* magic, const Zob
     return nodes;
 }
 
-void perft_divide(Position* pos, int depth, const MagicData* magic, const ZobristKeys* keys) {
+void perft_divide(Position* pos, int depth, const MagicData* magic, ZobristKeys* keys) {
     MoveList list;
     generate_legal_moves(pos, &list, pos->side_to_move, magic, keys);
 

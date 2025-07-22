@@ -1,16 +1,16 @@
 #include "board.h"
+#include "evaluation.h"
 #include "evalparams.h"
 #include "evalsearch.h"
 #include "evaltuner.h"
-#include "magic.h"
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
 #include <stdlib.h>
 
-#define MAX_TRAINING 10000000
+#define MAX_TRAINING 100000
 #define MAX_ITERATIONS 1000
-#define LEARNING_RATE 100.0
+#define LEARNING_RATE 0.01
 #define K_START 0.0005
 #define K_END 0.01
 #define K_STEP 0.0005
@@ -58,7 +58,8 @@ static double compute_gradient_norm(const double* gradient) {
     return sqrt(norm);
 }
 
-EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* params, const MagicData* magic) {
+EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* params) {
+    FeatureCounts counts = {0};
     EvalResult result;
     result.score = 0.0;
     result.num_features = 0;
@@ -70,22 +71,22 @@ EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* p
         int piece = get_piece_on_square(pos, sq);
         if (piece == -1) continue;
 
-        int side = (piece < 6) ? WHITE : BLACK;
-        int type = piece % 6;
-        int mirrored_sq = (side == WHITE) ? sq : mirror(sq);
+        int piece_color = (piece < 6) ? WHITE : BLACK;
+        int piece_type = piece % 6;
+        int mirrored_sq = (piece_color == WHITE) ? sq : MIRROR(sq);
 
         // Get parameter values and their indices
-        double mg_val = params->mg_value[type];
-        double eg_val = params->eg_value[type];
+        double mg_val = params->mg_value[piece_type];
+        double eg_val = params->eg_value[piece_type];
 
-        int idx_mg_val = IDX_MG_VALUE + type;
-        int idx_eg_val = IDX_EG_VALUE + type;
+        int idx_mg_val = IDX_MG_VALUE + piece_type;
+        int idx_eg_val = IDX_EG_VALUE + piece_type;
 
         // Get PST values and indices
         double mg_pst = 0.0, eg_pst = 0.0;
         int idx_mg_pst = -1, idx_eg_pst = -1;
 
-        switch (type) {
+        switch (piece_type) {
             case P:
                 mg_pst = params->pawn_pst_mg[mirrored_sq];
                 eg_pst = params->pawn_pst_eg[mirrored_sq];
@@ -133,10 +134,9 @@ EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* p
         double eg_score = eg_val + eg_pst;
 
         // Apply to running totals
-        double sign = (side == WHITE) ? 1.0 : -1.0;
+        double sign = (piece_color == WHITE) ? +1.0 : -1.0;
         mg += sign * mg_score;
         eg += sign * eg_score;
-
 
         // Add feature contributions with proper weights
         if (result.num_features + 4 < MAX_FEATURES_PER_POSITION) {
@@ -144,6 +144,95 @@ EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* p
             result.features[result.num_features++] = (FeatureContribution){idx_eg_val, sign};
             result.features[result.num_features++] = (FeatureContribution){idx_mg_pst, sign};
             result.features[result.num_features++] = (FeatureContribution){idx_eg_pst, sign};
+        }
+    }
+
+    evaluate_passed_pawns(pos, &counts, NULL, params, WHITE, NULL, NULL, &mg, &eg);
+    int passed_pawn_count_white = counts.passed_pawn_bonus;
+    evaluate_passed_pawns(pos, &counts, NULL, params, BLACK, NULL, NULL, &mg, &eg);
+    int passed_pawn_count_black = counts.passed_pawn_bonus;
+
+    for (int i = 0; i < passed_pawn_count_white; i++) {
+        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+            result.features[result.num_features++] = (FeatureContribution){IDX_PASSED_PAWN_BONUS_MG, +1.0};
+            result.features[result.num_features++] = (FeatureContribution){IDX_PASSED_PAWN_BONUS_EG, +1.0};
+        }
+    }
+    
+    for (int i = 0; i < passed_pawn_count_black; i++) {
+        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+            result.features[result.num_features++] = (FeatureContribution){IDX_PASSED_PAWN_BONUS_MG, -1.0};
+            result.features[result.num_features++] = (FeatureContribution){IDX_PASSED_PAWN_BONUS_EG, -1.0};
+        }
+    }
+
+    evaluate_knight_outposts(pos, &counts, NULL, params, WHITE, NULL, NULL, &mg, &eg);
+    int knight_outpost_count_white = counts.knight_outpost_bonus;
+    evaluate_knight_outposts(pos, &counts, NULL, params, BLACK, NULL, NULL, &mg, &eg);
+    int knight_outpost_count_black = counts.knight_outpost_bonus;
+
+    for (int i = 0; i < knight_outpost_count_white; i++) {
+        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+            result.features[result.num_features++] = (FeatureContribution){IDX_KNIGHT_OUTPOST_BONUS_MG, +1.0};
+            result.features[result.num_features++] = (FeatureContribution){IDX_KNIGHT_OUTPOST_BONUS_EG, +1.0};
+        }
+    }
+    
+    for (int i = 0; i < knight_outpost_count_black; i++) {
+        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+            result.features[result.num_features++] = (FeatureContribution){IDX_KNIGHT_OUTPOST_BONUS_MG, -1.0};
+            result.features[result.num_features++] = (FeatureContribution){IDX_KNIGHT_OUTPOST_BONUS_EG, -1.0};
+        }
+    }
+
+    evaluate_rook_activity(pos, &counts, NULL, params, WHITE, NULL, NULL, &mg, &eg);
+    int semi_open_file_rook_count_white = counts.rook_semi_open_file_bonus;
+    int open_file_rook_count_white = counts.rook_open_file_bonus;
+    int blind_swine_rook_count_white = counts.blind_swine_rooks_bonus;
+    evaluate_rook_activity(pos, &counts, NULL, params, BLACK, NULL, NULL, &mg, &eg);
+    int semi_open_file_rook_count_black = counts.rook_semi_open_file_bonus;
+    int open_file_rook_count_black = counts.rook_open_file_bonus;
+    int blind_swine_rook_count_black = counts.blind_swine_rooks_bonus;
+
+    for (int i = 0; i < semi_open_file_rook_count_white; i++) {
+        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_SEMI_OPEN_FILE_BONUS_MG, +1.0};
+            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_SEMI_OPEN_FILE_BONUS_EG, +1.0};
+        }
+    }
+    
+    for (int i = 0; i < semi_open_file_rook_count_black; i++) {
+        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_SEMI_OPEN_FILE_BONUS_MG, -1.0};
+            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_SEMI_OPEN_FILE_BONUS_EG, -1.0};
+        }
+    }
+
+    for (int i = 0; i < open_file_rook_count_white; i++) {
+        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_OPEN_FILE_BONUS_MG, +1.0};
+            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_OPEN_FILE_BONUS_EG, +1.0};
+        }
+    }
+    
+    for (int i = 0; i < open_file_rook_count_black; i++) {
+        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_OPEN_FILE_BONUS_MG, -1.0};
+            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_OPEN_FILE_BONUS_EG, -1.0};
+        }
+    }
+
+    for (int i = 0; i < blind_swine_rook_count_white; i++) {
+        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+            result.features[result.num_features++] = (FeatureContribution){IDX_BLIND_SWINE_ROOKS_BONUS_MG, +1.0};
+            result.features[result.num_features++] = (FeatureContribution){IDX_BLIND_SWINE_ROOKS_BONUS_EG, +1.0};
+        }
+    }
+    
+    for (int i = 0; i < blind_swine_rook_count_black; i++) {
+        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+            result.features[result.num_features++] = (FeatureContribution){IDX_BLIND_SWINE_ROOKS_BONUS_MG, -1.0};
+            result.features[result.num_features++] = (FeatureContribution){IDX_BLIND_SWINE_ROOKS_BONUS_EG, -1.0};
         }
     }
 
@@ -160,8 +249,8 @@ EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* p
         bool is_mg = false;
         if (idx >= IDX_MG_VALUE && idx < IDX_EG_VALUE) {
             is_mg = true;
-        } else if (idx >= IDX_EG_VALUE && idx < IDX_PAWN_PST_MG) {
-            is_mg = false;
+        } else if (idx == IDX_PASSED_PAWN_BONUS_MG || idx == IDX_KNIGHT_OUTPOST_BONUS_MG || idx == IDX_ROOK_SEMI_OPEN_FILE_BONUS_MG || idx == IDX_ROOK_OPEN_FILE_BONUS_MG || idx == IDX_BLIND_SWINE_ROOKS_BONUS_MG) {
+            is_mg = true;
         } else {
             // For PST parameters, check the range
             is_mg = (idx >= IDX_PAWN_PST_MG && idx < IDX_PAWN_PST_EG) ||
@@ -174,16 +263,24 @@ EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* p
         result.features[i].weight *= is_mg ? mg_weight : eg_weight;
     }
 
+    // if (pos->side_to_move == BLACK) {
+    //     mg = -mg;
+    //     eg = -eg;
+    //     for (int i = 0; i < result.num_features; i++) {
+    //         result.features[i].weight *= -1.0;
+    //     }
+    // }
+
     result.score = mg_weight * mg + eg_weight * eg;
     return result;
 }
 
-double find_best_k(const EvalParamsDouble* params, const TrainingEntry* data, int n, const MagicData* magic) {
+double find_best_k(const EvalParamsDouble* params, const TrainingEntry* data, int n) {
     double best_k = K_START;
     double best_loss = 1e9;
 
     for (double k = K_START; k <= K_END; k += K_STEP) {
-        double loss = compute_loss(params, data, n, k, magic);
+        double loss = compute_loss(params, data, n, k);
         printf("Try k = %.4f -> Loss = %.6f\n", k, loss);
         if (loss < best_loss) {
             best_loss = loss;
@@ -203,13 +300,13 @@ double sigmoid_derivative(double x, double k) {
     return k * s * (1.0 - s);
 }
 
-double compute_loss(const EvalParamsDouble* params, const TrainingEntry* data, int n, double k, const MagicData* magic) {
+double compute_loss(const EvalParamsDouble* params, const TrainingEntry* data, int n, double k) {
     double loss = 0.0;
     Position pos;
 
     for (int i = 0; i < n; i++) {
         init_position(&pos, data[i].fen);
-        EvalResult r = evaluate_with_features(&pos, params, magic);
+        EvalResult r = evaluate_with_features(&pos, params);
         double p = sigmoid(r.score, k);
         double e = p - data[i].wdl;
         loss += e * e;
@@ -239,7 +336,21 @@ void convert_params_to_integer(const EvalParamsDouble* in, EvalParams* out) {
         out->king_pst_mg[i] = (int)round(in->king_pst_mg[i]);
         out->king_pst_eg[i] = (int)round(in->king_pst_eg[i]);
     }
-}
+
+    out->passed_pawn_bonus_mg = (int)round(in->passed_pawn_bonus_mg);
+    out->passed_pawn_bonus_eg = (int)round(in->passed_pawn_bonus_eg);
+
+    out->knight_outpost_bonus_mg = (int)round(in->knight_outpost_bonus_mg);
+    out->knight_outpost_bonus_eg = (int)round(in->knight_outpost_bonus_eg);
+
+    out->rook_semi_open_file_bonus_mg = (int)round(in->rook_semi_open_file_bonus_mg);
+    out->rook_semi_open_file_bonus_eg = (int)round(in->rook_semi_open_file_bonus_eg);
+
+    out->rook_open_file_bonus_mg = (int)round(in->rook_open_file_bonus_mg);
+    out->rook_open_file_bonus_eg = (int)round(in->rook_open_file_bonus_eg);
+
+    out->blind_swine_rooks_bonus_mg = (int)round(in->blind_swine_rooks_bonus_mg);
+    out->blind_swine_rooks_bonus_eg = (int)round(in->blind_swine_rooks_bonus_eg);}
 
 void save_evalparams_text(const char* path, const EvalParams* p) {
     FILE* f = fopen(path, "w");
@@ -250,16 +361,16 @@ void save_evalparams_text(const char* path, const EvalParams* p) {
 
     fprintf(f, "// Generated tuned evaluation parameters\n");
     fprintf(f, "#include \"evalparams.h\"\n\n");
-    fprintf(f, "EvalParams tuned_params = {\n");
+    // fprintf(f, "EvalParams tuned_params = {\n");
 
     // mg_value and eg_value
-    fprintf(f, "  .mg_value = {");
+    fprintf(f, "static const int mg_value[6] = {");
     for (int i = 0; i < 6; i++) fprintf(f, "%d%s", p->mg_value[i], (i < 5 ? ", " : ""));
-    fprintf(f, "},\n");
+    fprintf(f, "};\n");
 
-    fprintf(f, "  .eg_value = {");
+    fprintf(f, "static const int eg_value[6] = {");
     for (int i = 0; i < 6; i++) fprintf(f, "%d%s", p->eg_value[i], (i < 5 ? ", " : ""));
-    fprintf(f, "},\n");
+    fprintf(f, "};\n\n");
 
     // PSTs
     const char* names[] = {
@@ -281,14 +392,34 @@ void save_evalparams_text(const char* path, const EvalParams* p) {
     };
 
     for (int a = 0; a < 12; a++) {
-        fprintf(f, "  .%s = {", names[a]);
+        fprintf(f, "static const int %s[64] = {", names[a]);
         for (int i = 0; i < 64; i++) {
             fprintf(f, "%d%s", arrays[a][i], (i < 63 ? ", " : ""));
         }
-        fprintf(f, "},\n");
+        fprintf(f, "};\n\n");
     }
 
-    fprintf(f, "};\n");
+    // Passed pawn bonuses
+    fprintf(f, "static const int passed_pawn_bonus_mg = %d;\n", p->passed_pawn_bonus_mg);
+    fprintf(f, "static const int passed_pawn_bonus_eg = %d;\n\n", p->passed_pawn_bonus_eg);
+
+    // Knight outpost bonuses
+    fprintf(f, "static const int knight_outpost_bonus_mg = %d;\n", p->knight_outpost_bonus_mg);
+    fprintf(f, "static const int knight_outpost_bonus_eg = %d;\n", p->knight_outpost_bonus_eg);
+
+    // Semi-open file rook bonuses
+    fprintf(f, "static const int rook_semi_open_file_bonus_mg = %d;\n", p->rook_semi_open_file_bonus_mg);
+    fprintf(f, "static const int rook_semi_open_file_bonus_eg = %d;\n", p->rook_semi_open_file_bonus_eg);
+
+    // Open file rook bonuses
+    fprintf(f, "static const int rook_open_file_bonus_mg = %d;\n", p->rook_open_file_bonus_mg);
+    fprintf(f, "static const int rook_open_file_bonus_eg = %d;\n", p->rook_open_file_bonus_eg);
+
+    // Rooks on 2nd/7th rank bonuses
+    fprintf(f, "static const int blind_swine_rooks_bonus_mg = %d;\n", p->blind_swine_rooks_bonus_mg);
+    fprintf(f, "static const int blind_swine_rooks_bonus_eg = %d;\n", p->blind_swine_rooks_bonus_eg);
+
+    // fprintf(f, "};\n");
     fclose(f);
     printf("Saved text params to %s\n", path);
 }
@@ -296,8 +427,6 @@ void save_evalparams_text(const char* path, const EvalParams* p) {
 void run_minibatch_training(
     EvalParamsDouble* params,
     const TrainingEntry* data,
-    int num_entries,
-    const MagicData* magic,
     int batch_size,
     double learning_rate,
     int iterations,
@@ -321,9 +450,7 @@ void run_minibatch_training(
             const TrainingEntry* entry = &data[i];
 
             init_position(&pos, entry->fen);
-            EvalResult result = evaluate_with_features(&pos, params, magic);
-
-            float i = 0.0;
+            EvalResult result = evaluate_with_features(&pos, params);
             
             // Score from white's perspective
             double white_score = result.score;
@@ -378,8 +505,23 @@ void run_minibatch_training(
         APPLY_PST_UPDATE(king_pst_mg,   IDX_KING_PST_MG);
         APPLY_PST_UPDATE(king_pst_eg,   IDX_KING_PST_EG);
 
+        params->passed_pawn_bonus_mg -= current_lr * gradient[IDX_PASSED_PAWN_BONUS_MG];
+        params->passed_pawn_bonus_eg -= current_lr * gradient[IDX_PASSED_PAWN_BONUS_EG];
+
+        params->knight_outpost_bonus_mg -= current_lr * gradient[IDX_KNIGHT_OUTPOST_BONUS_MG];
+        params->knight_outpost_bonus_eg -= current_lr * gradient[IDX_KNIGHT_OUTPOST_BONUS_EG];
+
+        params->rook_semi_open_file_bonus_mg -= current_lr * gradient[IDX_ROOK_SEMI_OPEN_FILE_BONUS_MG];
+        params->rook_semi_open_file_bonus_eg -= current_lr * gradient[IDX_ROOK_SEMI_OPEN_FILE_BONUS_EG];
+
+        params->rook_open_file_bonus_mg -= current_lr * gradient[IDX_ROOK_OPEN_FILE_BONUS_MG];
+        params->rook_open_file_bonus_eg -= current_lr * gradient[IDX_ROOK_OPEN_FILE_BONUS_EG];
+
+        params->blind_swine_rooks_bonus_mg -= current_lr * gradient[IDX_BLIND_SWINE_ROOKS_BONUS_MG];
+        params->blind_swine_rooks_bonus_eg -= current_lr * gradient[IDX_BLIND_SWINE_ROOKS_BONUS_EG];
+
         // Check if loss improved
-        double new_loss = compute_loss(params, data, batch_size, sigmoid_k, magic);
+        double new_loss = compute_loss(params, data, batch_size, sigmoid_k);
         
         if (new_loss < prev_loss) {
             // Good update, slightly increase learning rate
@@ -399,7 +541,6 @@ void run_minibatch_training(
             break;
         }   
 
-
         // save params
 
         EvalParams final;
@@ -415,7 +556,7 @@ void run_minibatch_training(
     free(gradient);
 }
 
-void run_tuner_main(const char* dataset_path, const char* output_prefix, const MagicData* magic) {
+void run_tuner_main(const char* dataset_path, const char* output_prefix) {
     int num_entries = load_dataset(dataset_path, training_data, MAX_TRAINING);
     if (num_entries <= 0) {
         fprintf(stderr, "Failed to load dataset from %s\n", dataset_path);
@@ -427,8 +568,7 @@ void run_tuner_main(const char* dataset_path, const char* output_prefix, const M
     EvalParamsDouble params;
     init_double_params(&params);
 
-
-    double k = find_best_k(&params, training_data, num_entries, magic);
+    double k = find_best_k(&params, training_data, num_entries);
 
     printf("Before training: mg_value[0] = %.3f\n", params.mg_value[0]);
     
@@ -436,13 +576,11 @@ void run_tuner_main(const char* dataset_path, const char* output_prefix, const M
         &params,
         training_data,
         num_entries,
-        magic,
-        num_entries,
         LEARNING_RATE,
         MAX_ITERATIONS,
         k,
         output_prefix
     );
     
-    printf("After training:  mg_value[0] = %.3f\n", params.mg_value[0]);
+    printf("After training:  rook_open_file_bonus_eg = %.10f\n", params.rook_open_file_bonus_eg);
 }

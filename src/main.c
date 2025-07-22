@@ -38,7 +38,6 @@ int main(int argc, char** argv) {
     Position pos;
     MoveState state;
     MoveList list;
-
     // const char* start_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     // init_position(&pos, start_fen);
 
@@ -62,12 +61,12 @@ int main(int argc, char** argv) {
     // }
     // printf("Detected %d non-zero weighted features\n", result.num_features - zero_weight_features);
 
-    // uci_loop(&pos, &list, &state, depth, magic, keys);
-    if (argc >= 3) {
-        run_tuner_main(argv[1], argv[2], magic);
-    } else {
-        fprintf(stderr, "Usage: %s <dataset.txt> <output_prefix>\n", argv[0]);
-    }
+    uci_loop(&pos, &list, &state, depth, magic, keys);
+    // if (argc >= 3) {
+    //     run_tuner_main(argv[1], argv[2]);
+    // } else {
+    //     fprintf(stderr, "Usage: %s <dataset.txt> <output_prefix>\n", argv[0]);
+    // }
     free(magic);
     free(keys);
     return 0;

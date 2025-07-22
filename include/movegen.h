@@ -84,14 +84,14 @@ static inline Bitboard knight_attacks(int sq) {
     // Precompute knight moves with file masks to prevent wrap-around (overflow automatically handled by bitwise operations)
     Bitboard precomputed_knight_attacks = 0;
 
-    precomputed_knight_attacks |= (knight & ~FILE_X(8)) << 17; // +1 file, +2 ranks
-    precomputed_knight_attacks |= (knight & ~FILE_X(1)) << 15; // -1 file, +2 ranks
-    precomputed_knight_attacks |= (knight & ~(FILE_X(8) | FILE_X(7))) << 10; // +2 files, +1 rank
-    precomputed_knight_attacks |= (knight & ~(FILE_X(1) | FILE_X(2))) << 6; // -2 files, +1 rank
-    precomputed_knight_attacks |= (knight & ~FILE_X(1)) >> 17; // -1 file, -2 ranks
-    precomputed_knight_attacks |= (knight & ~FILE_X(8)) >> 15; // +1 file, -2 ranks
-    precomputed_knight_attacks |= (knight & ~(FILE_X(1) | FILE_X(2))) >> 10; // -2 files, -1 rank
-    precomputed_knight_attacks |= (knight & ~(FILE_X(8) | FILE_X(7))) >> 6; // +2 files, -1 rank
+    precomputed_knight_attacks |= (knight & ~FILE_X(7)) << 17; // +1 file, +2 ranks
+    precomputed_knight_attacks |= (knight & ~FILE_X(0)) << 15; // -1 file, +2 ranks
+    precomputed_knight_attacks |= (knight & ~(FILE_X(7) | FILE_X(6))) << 10; // +2 files, +1 rank
+    precomputed_knight_attacks |= (knight & ~(FILE_X(0) | FILE_X(1))) << 6; // -2 files, +1 rank
+    precomputed_knight_attacks |= (knight & ~FILE_X(0)) >> 17; // -1 file, -2 ranks
+    precomputed_knight_attacks |= (knight & ~FILE_X(7)) >> 15; // +1 file, -2 ranks
+    precomputed_knight_attacks |= (knight & ~(FILE_X(0) | FILE_X(1))) >> 10; // -2 files, -1 rank
+    precomputed_knight_attacks |= (knight & ~(FILE_X(7) | FILE_X(6))) >> 6; // +2 files, -1 rank
 
     // Return the precomputed knight moves
     return precomputed_knight_attacks;
@@ -127,14 +127,14 @@ static inline Bitboard king_attacks(int sq) {
     // Precompute king moves with file masks to prevent wrap-around (overflow automatically handled by bitwise operations)
     Bitboard precomputed_king_attacks = 0;
 
-    precomputed_king_attacks |= (king & ~FILE_X(1)) << 7; // -1 file, +1 rank
+    precomputed_king_attacks |= (king & ~FILE_X(0)) << 7; // -1 file, +1 rank
     precomputed_king_attacks |= king << 8; // +1 rank
-    precomputed_king_attacks |= (king & ~FILE_X(8)) << 9; // +1 file, +1 rank
-    precomputed_king_attacks |= (king & ~FILE_X(8)) << 1; // +1 file
-    precomputed_king_attacks |= (king & ~FILE_X(8)) >> 7; // +1 file, -1 rank
+    precomputed_king_attacks |= (king & ~FILE_X(7)) << 9; // +1 file, +1 rank
+    precomputed_king_attacks |= (king & ~FILE_X(7)) << 1; // +1 file
+    precomputed_king_attacks |= (king & ~FILE_X(7)) >> 7; // +1 file, -1 rank
     precomputed_king_attacks |= king >> 8; // -1 rank
-    precomputed_king_attacks |= (king & ~FILE_X(1)) >> 9; // -1 file, -1 rank
-    precomputed_king_attacks |= (king & ~FILE_X(1)) >> 1; // -1 file
+    precomputed_king_attacks |= (king & ~FILE_X(0)) >> 9; // -1 file, -1 rank
+    precomputed_king_attacks |= (king & ~FILE_X(0)) >> 1; // -1 file
     
     // Return the precomputed king moves
     return precomputed_king_attacks;
@@ -156,8 +156,8 @@ static inline int is_square_attacked(const Position* pos, int sq, int attacking_
     Bitboard pawns = pos->pieces[attacking_side == WHITE ? WP : BP];
     // Initialize a bitboard for all pawn attacks from the given square
     Bitboard pawn_attackers = (attacking_side == WHITE)
-        ? (((1ULL << sq) & ~FILE_X(8)) >> 7) | (((1ULL << sq) & ~FILE_X(1)) >> 9)
-        : (((1ULL << sq) & ~FILE_X(1)) << 7) | (((1ULL << sq) & ~FILE_X(8)) << 9);
+        ? (((1ULL << sq) & ~FILE_X(7)) >> 7) | (((1ULL << sq) & ~FILE_X(0)) >> 9)
+        : (((1ULL << sq) & ~FILE_X(0)) << 7) | (((1ULL << sq) & ~FILE_X(7)) << 9);
 
 
     if (pawns & pawn_attackers) {
@@ -251,13 +251,13 @@ static inline Bitboard get_attackers_to(const Position* pos, int sq, Bitboard oc
     if (sq >= 0 && sq < 64) {
         // White pawns attack like black
         Bitboard white_pawn_attackers =
-            ((sq_bb & ~FILE_X(8)) >> 7) |
-            ((sq_bb & ~FILE_X(1)) >> 9);
+            ((sq_bb & ~FILE_X(7)) >> 7) |
+            ((sq_bb & ~FILE_X(0)) >> 9);
 
         // Black pawns attack like white
         Bitboard black_pawn_attackers =
-            ((sq_bb & ~FILE_X(1)) << 7) |
-            ((sq_bb & ~FILE_X(8)) << 9);
+            ((sq_bb & ~FILE_X(0)) << 7) |
+            ((sq_bb & ~FILE_X(7)) << 9);
 
         attackers |= pos->pieces[WP] & white_pawn_attackers;
         attackers |= pos->pieces[BP] & black_pawn_attackers;
@@ -302,7 +302,7 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
     // Get the enemy king bitboard
     Bitboard enemy_king = pos->pieces[side ? WK : BK];
     // Set promotion rank
-    Rank promotion_rank = (side == WHITE) ? (RANK_X(8)) : (RANK_X(1));
+    Rank promotion_rank = (side == WHITE) ? (RANK_X(7)) : (RANK_X(0));
     // Set forward direction
     int forward = (side == WHITE) ? (8) : (-8);
     // Set left direction (for captures)
@@ -320,70 +320,62 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
     // For each generated signle push on the bitboard    
     while(non_promo_single_pushes) {
         // Get the first generated single push on the bitboard
-        int to = get_lsb(non_promo_single_pushes);
+        int to = pop_lsb(&non_promo_single_pushes);
         // Compute the square from which the pawn pushed from
         int from = to - forward;
         // Add the move to the list
         SAFE_ADD_MOVE(list, from, to, QUIET);
-        // Remove the move from the bitboard
-        pop_lsb(non_promo_single_pushes);
     }
 
     /* ---------- Double pushes (non-promoting) ---------- */
 
     // Double push every pawn on the bitboard if the pawn is on the 2nd (white) or 7th (black) rank and both of the two squares in front are empty
     Bitboard double_pushes = (side == WHITE)
-        ? ((((pawns & RANK_X(2)) << 8) & empty) << 8) & empty
-        : ((((pawns & RANK_X(7)) >> 8) & empty) >> 8) & empty;
+        ? ((((pawns & RANK_X(1)) << 8) & empty) << 8) & empty
+        : ((((pawns & RANK_X(6)) >> 8) & empty) >> 8) & empty;
     
     // For each generated double push on the bitboard
     while(double_pushes) {
         // Get the first generated double push on the bitboard
-        int to = get_lsb(double_pushes);
+        int to = pop_lsb(&double_pushes);
         // Compute the square from which the pawn pushed from
         int from = to - forward * 2;
         // Add the move to the list
         SAFE_ADD_MOVE(list, from, to, DOUBLE_PUSH);
-        // Remove the move from the bitboard
-        pop_lsb(double_pushes);
     }
 
     /* ---------- Captures (left, non-promoting) ---------- */
 
     // Compute left captures for every pawn on the bitboard if the square diagonally left is occupied by an opponent's piece, is not the enemy king, and is not on the promotion rank
     Bitboard non_promo_left_captures = (side == WHITE)
-        ? (pawns & ~FILE_X(1)) << 7 & opp & ~enemy_king & ~promotion_rank
-        : (pawns & ~FILE_X(1)) >> 9 & opp & ~enemy_king & ~promotion_rank;
+        ? (pawns & ~FILE_X(0)) << 7 & opp & ~enemy_king & ~promotion_rank
+        : (pawns & ~FILE_X(0)) >> 9 & opp & ~enemy_king & ~promotion_rank;
     
     // For each generated left capture on the bitboard
     while(non_promo_left_captures) {
         // Get the first generated left capture on the bitboard
-        int to = get_lsb(non_promo_left_captures);
+        int to = pop_lsb(&non_promo_left_captures);
         // Compute the square from which the pawn captured from
         int from = to - left;
         // Add the move to the list
         SAFE_ADD_MOVE(list, from, to, CAPTURE);
-        // Remove the move from the bitboard
-        pop_lsb(non_promo_left_captures);
     }
 
     /* ---------- Captures (right, non-promoting) ---------- */
 
     // Compute right captures for every pawn on the bitboard if the square diagonally right is occupied by an opponent's piece, is not the enemy king, and is not on the promotion rank
     Bitboard non_promo_right_captures = (side == WHITE)
-        ? (pawns & ~FILE_X(8)) << 9 & opp & ~enemy_king & ~promotion_rank
-        : (pawns & ~FILE_X(8)) >> 7 & opp & ~enemy_king & ~promotion_rank;
+        ? (pawns & ~FILE_X(7)) << 9 & opp & ~enemy_king & ~promotion_rank
+        : (pawns & ~FILE_X(7)) >> 7 & opp & ~enemy_king & ~promotion_rank;
     
     // For each generated right capture on the bitboard
     while(non_promo_right_captures) {
         // Get the first generated right capture on the bitboard
-        int to = get_lsb(non_promo_right_captures);
+        int to = pop_lsb(&non_promo_right_captures);
         // Compute the square from which the pawn captured from
         int from = to - right;
         // Add the move to the list
         SAFE_ADD_MOVE(list, from, to, CAPTURE);
-        // Remove the move from the bitboard
-        pop_lsb(non_promo_right_captures);
     }
 
     /* ---------- Promotions (push) ---------- */
@@ -396,7 +388,7 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
     // For each generated push promotion on the bitboard
     while(push_promotions) {
         // Get the first generated push promotion on the bitboard
-        int to = get_lsb(push_promotions);
+        int to = pop_lsb(&push_promotions);
         // Compute the square from which the pawn pushed from
         int from = to - forward;
         // Add the moves to the list
@@ -404,21 +396,19 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
         SAFE_ADD_MOVE(list, from, to, PROMOTE_B);
         SAFE_ADD_MOVE(list, from, to, PROMOTE_R);
         SAFE_ADD_MOVE(list, from, to, PROMOTE_Q);
-        // Remove the move from the bitboard
-        pop_lsb(push_promotions);
     }
 
     /* ---------- Promotions (left-capturing) ---------- */
 
     // Compute left capture promotions for every pawn on the bitboard if the square diagonally left is occupied by an opponent's piece, is not the enemy king, and is on the promotion rank
     Bitboard left_cap_promotions = (side == WHITE)
-        ? (pawns & ~FILE_X(1)) << 7 & opp & ~enemy_king & promotion_rank
-        : (pawns & ~FILE_X(1)) >> 9 & opp & ~enemy_king & promotion_rank;
+        ? (pawns & ~FILE_X(0)) << 7 & opp & ~enemy_king & promotion_rank
+        : (pawns & ~FILE_X(0)) >> 9 & opp & ~enemy_king & promotion_rank;
     
     // For each generated left capture promotion on the bitboard
     while(left_cap_promotions) {
         // Get the first generated left capture promotion on the bitboard
-        int to = get_lsb(left_cap_promotions);
+        int to = pop_lsb(&left_cap_promotions);
         // Compute the square from which the pawn captured from
         int from = to - left;
         // Add the moves to the list
@@ -426,21 +416,19 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
         SAFE_ADD_MOVE(list, from, to, PROMOTE_B_CAPTURE);
         SAFE_ADD_MOVE(list, from, to, PROMOTE_R_CAPTURE);
         SAFE_ADD_MOVE(list, from, to, PROMOTE_Q_CAPTURE);
-        // Remove the move from the bitboard        
-        pop_lsb(left_cap_promotions);
     }
 
     /* ---------- Promotions (right-capturing) ---------- */
 
     // Compute right capture promotions for every pawn on the bitboard if the square diagonally right is occupied by an opponent's piece, is not the enemy king, and is on the promotion rank
     Bitboard right_cap_promotions = (side == WHITE)
-        ? (pawns & ~FILE_X(8)) << 9 & opp & ~enemy_king & promotion_rank
-        : (pawns & ~FILE_X(8)) >> 7 & opp & ~enemy_king & promotion_rank;
+        ? (pawns & ~FILE_X(7)) << 9 & opp & ~enemy_king & promotion_rank
+        : (pawns & ~FILE_X(7)) >> 7 & opp & ~enemy_king & promotion_rank;
     
     // For each generated right capture promotion on the bitboard
     while(right_cap_promotions) {
         // Get the first generated right capture promotion on the bitboard
-        int to = get_lsb(right_cap_promotions);
+        int to = pop_lsb(&right_cap_promotions);
         // Compute the square from which the pawn captured from
         int from = to - right;
         // Add the moves to the list
@@ -448,8 +436,6 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
         SAFE_ADD_MOVE(list, from, to, PROMOTE_B_CAPTURE);
         SAFE_ADD_MOVE(list, from, to, PROMOTE_R_CAPTURE);
         SAFE_ADD_MOVE(list, from, to, PROMOTE_Q_CAPTURE);
-        // Remove the move from the bitboard
-        pop_lsb(right_cap_promotions);
     }
 
     /* ---------- En passant ---------- */
@@ -461,8 +447,8 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
 
         // Left-capturing en passant moves
         Bitboard ep_left = (side == WHITE)
-            ? (pawns & ~FILE_X(1)) << 7
-            : (pawns & ~FILE_X(1)) >> 9;
+            ? (pawns & ~FILE_X(0)) << 7
+            : (pawns & ~FILE_X(0)) >> 9;
         
         // Check if the pawn that left-captured en passant occupies the en passant square
         if (ep_left & ep_square) {
@@ -473,8 +459,8 @@ static inline void generate_pawn_moves(const Position* pos, MoveList* list, int 
         
         // Right-capturing en passant moves
         Bitboard ep_right = (side == WHITE)
-            ? (pawns & ~FILE_X(8)) << 9
-            : (pawns & ~FILE_X(8)) >> 7;
+            ? (pawns & ~FILE_X(7)) << 9
+            : (pawns & ~FILE_X(7)) >> 7;
 
         // Check if the pawn that right-captured en passant occupies the en passant square
         if (ep_right & ep_square) {
@@ -500,11 +486,10 @@ static inline void generate_knight_moves(const Position* pos, MoveList* list, in
     // For each knight on the bitboard
     while (knights) {
         // Get the square of the first knight on the bitboard (start checking set bits from a1)
-        int from = get_lsb(knights);
+        int from = pop_lsb(&knights);
 
         // Skip if the square is out of bounds
         if (!ON_BOARD(from)) {
-            pop_lsb(knights);
             continue;
         }
 
@@ -513,21 +498,16 @@ static inline void generate_knight_moves(const Position* pos, MoveList* list, in
         // For each generated knight move on the bitboard
         while (all_knight_moves) {
             // Get the target square from the knight moves
-            int to = get_lsb(all_knight_moves);
+            int to = pop_lsb(&all_knight_moves);
             // Remove the move if out of bounds
             if (!ON_BOARD(to)) {
-                pop_lsb(all_knight_moves);
                 continue;
             }
             // Determine if the move is a capture or a quiet move
             int flag = (opp & (1ULL << to)) ? CAPTURE : QUIET;
             // Add the move to the list 
             SAFE_ADD_MOVE(list, from, to, flag); 
-            // Remove the move from the bitboard
-            pop_lsb(all_knight_moves); 
         }
-        // Remove the knight from the bitboard to iterate to the next knight
-        pop_lsb(knights); 
     }
 }
 
@@ -548,10 +528,9 @@ static inline void generate_bishop_moves(const Position* pos, MoveList* list, in
     // For each bishop on the bitboard
     while (bishops) {
         // Get the square of the first bishop on the bitboard (start checking set bits from a1)
-        int from = get_lsb(bishops);
+        int from = pop_lsb(&bishops);
         // Skip if the square is out of bounds
         if (!ON_BOARD(from)) {
-            pop_lsb(bishops);
             continue;
         }
         
@@ -561,21 +540,16 @@ static inline void generate_bishop_moves(const Position* pos, MoveList* list, in
         // For each generated bishop move on the bitboard
         while (all_bishop_moves) {
             // Get the target square from the bishop moves
-            int to = get_lsb(all_bishop_moves);
+            int to = pop_lsb(&all_bishop_moves);
             // Remove the move if out of bounds
             if (!ON_BOARD(to)) {
-                pop_lsb(all_bishop_moves);
                 continue;
             }
             // Determine if the move is a capture or a quiet move
             int flag = (opp & (1ULL << to)) ? CAPTURE : QUIET;
             // Add the move to the list
             SAFE_ADD_MOVE(list, from, to, flag);
-            // Remove the move from the bitboard
-            pop_lsb(all_bishop_moves);
         }
-        // Remove the bishop from the bitboard to iterate to the next bishop
-        pop_lsb(bishops);
     }
 }
 
@@ -596,10 +570,9 @@ static inline void generate_rook_moves(const Position* pos, MoveList* list, int 
     // For each rook on the bitboard
     while (rooks) {
         // Get the square of the first rook on the bitboard (start checking set bits from a1)
-        int from = get_lsb(rooks);
+        int from = pop_lsb(&rooks);
         // Skip if the square is out of bounds
         if (!ON_BOARD(from)) {
-            pop_lsb(rooks);
             continue;
         }
 
@@ -609,21 +582,16 @@ static inline void generate_rook_moves(const Position* pos, MoveList* list, int 
         // For each generated rook move on the bitboard
         while (all_rook_moves) {
             // Get the target square from the rook moves
-            int to = get_lsb(all_rook_moves);
+            int to = pop_lsb(&all_rook_moves);
             // Remove the move if out of bounds
             if (!ON_BOARD(to)) {
-                pop_lsb(all_rook_moves);
                 continue;
             }
             // Determine if the move is a capture or a quiet move
             int flag = (opp & (1ULL << to)) ? CAPTURE : QUIET;
             // Add the move to the list
             SAFE_ADD_MOVE(list, from, to, flag);
-            // Remove the move from the bitboard
-            pop_lsb(all_rook_moves);
         }
-        // Remove the rook from the bitboard to iterate to the next rook
-        pop_lsb(rooks);
     }
 }
 
@@ -644,10 +612,9 @@ static inline void generate_queen_moves(const Position* pos, MoveList* list, int
     // For each queen on the bitboard
     while (queens) {
         // Get the square of the first queen on the bitboard (start checking set bits from a1)
-        int from = get_lsb(queens);
+        int from = pop_lsb(&queens);
         // Skip if the square is out of bounds
         if (!ON_BOARD(from)) {
-            pop_lsb(queens);
             continue;
         }
 
@@ -657,21 +624,16 @@ static inline void generate_queen_moves(const Position* pos, MoveList* list, int
         // For each generated queen move on the bitboard
         while (all_queen_moves) {
             // Get the target square from the queen moves
-            int to = get_lsb(all_queen_moves);
+            int to = pop_lsb(&all_queen_moves);
             // Remove the move if out of bounds
             if (!ON_BOARD(to)) {
-                pop_lsb(all_queen_moves);
                 continue;
             }
             // Determine if the move is a capture or a quiet move
             int flag = (opp & (1ULL << to)) ? CAPTURE : QUIET;
             // Add the move to the list
             SAFE_ADD_MOVE(list, from, to, flag);
-            // Remove the move from the bitboard
-            pop_lsb(all_queen_moves);
         }
-        // Remove the queen from the bitboard to iterate to the next queen
-        pop_lsb(queens);
     }
 }
 
@@ -685,14 +647,13 @@ static inline void generate_king_moves(const Position* pos, MoveList* list, int 
     Bitboard enemy_king = pos->pieces[side ? WK : BK];
 
     while (king_bb) {
-        int from = get_lsb(king_bb);
+        int from = pop_lsb(&king_bb);
         Bitboard moves = king_attacks(from) & ~own & ~enemy_king;
 
         while (moves) {
-            int to = get_lsb(moves);
+            int to = pop_lsb(&moves);
             int flag = (opp & (1ULL << to)) ? CAPTURE : QUIET;
             SAFE_ADD_MOVE(list, from, to, flag);
-            pop_lsb(moves);
         }
 
         /* ---------- Castling ---------- */
@@ -700,7 +661,6 @@ static inline void generate_king_moves(const Position* pos, MoveList* list, int 
         int king_from = from;
         Bitboard occupied = pos->occupied[ALL];
         if (!(pos->pieces[side == WHITE ? WK : BK] & (1ULL << king_from))) {
-            pop_lsb(king_bb);
             continue;
         }
 
@@ -736,12 +696,11 @@ static inline void generate_king_moves(const Position* pos, MoveList* list, int 
             bool safe = true;
             Bitboard path = king_path;
             while (path) {
-                int sq = get_lsb(path);
+                int sq = pop_lsb(&path);
                 if (is_square_attacked(pos, sq, side ^ 1, magic)) {
                     safe = false;
                     break;
                 }
-                pop_lsb(path);
             }
 
             if (!safe) continue;
@@ -750,15 +709,13 @@ static inline void generate_king_moves(const Position* pos, MoveList* list, int 
             int flag = (i == 0) ? CASTLE_QUEENSIDE : CASTLE_KINGSIDE;
             SAFE_ADD_MOVE(list, king_from, king_to, flag);
         }
-
-        pop_lsb(king_bb);
     }
 }
 
 // Check, checkmate, and stalemate detection
 int is_in_check(const Position* pos, int side, const MagicData* magic);
-int is_in_checkmate(const Position* pos, int side, const MagicData* magic, const ZobristKeys* keys);
-int is_in_stalemate(const Position* pos, int side, const MagicData* magic, const ZobristKeys* keys);
+int is_in_checkmate(const Position* pos, int side, const MagicData* magic, ZobristKeys* keys);
+int is_in_stalemate(const Position* pos, int side, const MagicData* magic, ZobristKeys* keys);
 
 // Make and unmake move
 int make_move(Position* pos, MoveState* state, int move, ZobristKeys* keys);
@@ -802,6 +759,6 @@ static inline void generate_pseudo_legal_moves(const Position* pos, MoveList* li
     generate_king_moves(pos, list, side, magic);
 }
 
-void generate_legal_moves(const Position* pos, MoveList* list, int side, const MagicData* magic, const ZobristKeys* keys);
+void generate_legal_moves(const Position* pos, MoveList* list, int side, const MagicData* magic, ZobristKeys* keys);
 
 #endif

@@ -27,7 +27,7 @@ int is_in_check(const Position* pos, int side, const MagicData* magic) {
 }
 
 // Is the given side in checkmate?
-int is_in_checkmate(const Position* pos, int side, const MagicData* magic, const ZobristKeys* keys) {
+int is_in_checkmate(const Position* pos, int side, const MagicData* magic, ZobristKeys* keys) {
 
     // Check if the given side is in check: if not, they can't be in checkmate either
     if (!is_in_check(pos, side, magic)) return 0;
@@ -39,7 +39,7 @@ int is_in_checkmate(const Position* pos, int side, const MagicData* magic, const
 }
 
 // Is the given side in stalemate?
-int is_in_stalemate(const Position* pos, int side, const MagicData* magic, const ZobristKeys* keys) {
+int is_in_stalemate(const Position* pos, int side, const MagicData* magic, ZobristKeys* keys) {
 
     // Check if the given side is in check: if yes, they can't be in stalemate
     if (is_in_check(pos, side, magic)) return 0;
@@ -340,7 +340,7 @@ int unmake_move(Position* pos, const MoveState* state, ZobristKeys* keys) {
     return 1;
 }
 
-void generate_legal_moves(const Position* pos, MoveList* list, int side, const MagicData* magic, const ZobristKeys* keys) {
+void generate_legal_moves(const Position* pos, MoveList* list, int side, const MagicData* magic, ZobristKeys* keys) {
     if (!pos || !list) return;
 
     MoveList pseudo = {0};

@@ -29,7 +29,7 @@ void move_to_uci(int move, char out[6]) {
     }
 }
 
-int parse_move(const Position* pos, const char* uci_str, const MagicData* magic, const ZobristKeys* keys) {
+int parse_move(const Position* pos, const char* uci_str, const MagicData* magic, ZobristKeys* keys) {
     MoveList list;
     generate_legal_moves(pos, &list, pos->side_to_move, magic, keys);
 
@@ -43,7 +43,7 @@ int parse_move(const Position* pos, const char* uci_str, const MagicData* magic,
     return 0; // Illegal move
 }
 
-void uci_loop(Position* pos, MoveList* list, MoveState* state, int depth, const MagicData* magic, const ZobristKeys* keys) {
+void uci_loop(Position* pos, MoveList* list, MoveState* state, int depth, const MagicData* magic, ZobristKeys* keys) {
     char line[32767];
     printf("id name JkCheeserChess\n");
     printf("id author JkCheese\n");

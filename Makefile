@@ -4,6 +4,7 @@ CFLAGS = -Wall -Wextra -std=c11 -Iinclude -O3 -march=native
 SRC = \
 	src/board.c \
 	src/engine.c \
+	src/evaluation.c \
 	src/evalparams.c \
 	src/evalsearch.c \
 	src/evaltuner.c \
@@ -17,7 +18,7 @@ SRC = \
 	src/zobrist.c
 
 OBJ = $(SRC:.c=.o)
-BIN = v9-tune_testing_5
+BIN = v9-tune_testing_4
 
 all: $(BIN)
 

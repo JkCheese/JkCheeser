@@ -34,7 +34,9 @@ int move_order_heuristic(const Position* pos, int move, int ply);
 int see(const Position* pos, int move, const MagicData* magic);
 int quiescence(Position* pos, int alpha, int beta, const EvalParams* params, const MagicData* magic, ZobristKeys* keys);
 int search(Position* pos, int depth, int ply, int alpha, int beta, int is_pv_node, const EvalParams* params, const MagicData* magic, ZobristKeys* keys);
-int find_best_move(Position* pos, int max_depth, const EvalParams* params, const MagicData* magic, ZobristKeys* keys);
+int find_best_move(Position* pos, int max_depth, const EvalParams* params,
+                   const MagicData* magic, ZobristKeys* keys,
+                   int* mate_line, int* mate_length);
 int score_move(const Position* pos, int move, int ply, int tt_move, const MagicData* magic);
 int get_lmr_reduction(int depth, int move_count, int is_pv, int is_capture, int gives_check);
 

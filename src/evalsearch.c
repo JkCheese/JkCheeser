@@ -510,8 +510,9 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, int is_pv_nod
 }
 
 // Enhanced find_best_move with iterative deepening
-int find_best_move(Position* pos, int max_depth, const EvalParams* params, const MagicData* magic, ZobristKeys* keys) {
-    // Clear search tables
+int find_best_move(Position* pos, int max_depth, const EvalParams* params,
+                   const MagicData* magic, ZobristKeys* keys,
+                   int* mate_line, int* mate_length) {
     for (int i = 0; i < MAX_PLY; i++) {
         killer_moves[i][0] = 0;
         killer_moves[i][1] = 0;
@@ -527,62 +528,50 @@ int find_best_move(Position* pos, int max_depth, const EvalParams* params, const
     generate_legal_moves(pos, &list, pos->side_to_move, magic, keys);
 
     if (list.count == 0) {
-        // No legal moves -> checkmate or stalemate
-        if (is_in_check(pos, pos->side_to_move, magic)) {
-            printf("Checkmate detected for side %d\n", pos->side_to_move);
-        } else {
-            printf("Stalemate detected for side %d\n", pos->side_to_move);
-        }
-        return -1;  // Indicate no moves available
+        return 0;
     }
 
     int best_move = 0;
     int best_score = -MATE_SCORE;
+    int pv_line[32];
+    int pv_len = 0;
 
-    // Iterative deepening loop
     for (int depth = 1; depth <= max_depth; depth++) {
         int current_best_move = 0;
         int current_best_score = -MATE_SCORE;
         MoveState state;
 
-        // Use aspiration windows for depth > 2
         int alpha = -MATE_SCORE;
         int beta = MATE_SCORE;
-        
+
         if (depth > 2 && abs(best_score) < MATE_SCORE - 1000) {
             alpha = best_score - 50;
             beta = best_score + 50;
         }
 
-        // Search with aspiration window
         bool research = true;
         int research_count = 0;
-        
+
         while (research && research_count < 3) {
             research = false;
-            current_best_score = -MATE_SCORE;
 
             for (int i = 0; i < list.count; i++) {
                 int move = list.moves[i];
-                
-                // Put previous iteration's best move first
+
                 if (depth > 1 && move == best_move) {
-                    // Swap to front
-                    list.moves[i] = list.moves[0];
+                    int tmp = list.moves[0];
                     list.moves[0] = move;
+                    list.moves[i] = tmp;
                 }
-                
+
                 if (!make_move(pos, &state, move, keys)) continue;
 
                 int score;
                 if (i == 0) {
-                    // First move: full window
                     score = -search(pos, depth - 1, 1, -beta, -alpha, 1, params, magic, keys);
                 } else {
-                    // PVS: try null window first
                     score = -search(pos, depth - 1, 1, -alpha - 1, -alpha, 0, params, magic, keys);
                     if (score > alpha && score < beta) {
-                        // Re-search with full window
                         score = -search(pos, depth - 1, 1, -beta, -alpha, 1, params, magic, keys);
                     }
                 }
@@ -594,39 +583,40 @@ int find_best_move(Position* pos, int max_depth, const EvalParams* params, const
                     current_best_move = move;
                 }
 
-                if (score > alpha) {
-                    alpha = score;
-                }
+                if (score > alpha) alpha = score;
 
-                // Check for aspiration window failures
                 if (score <= alpha - 50 || score >= beta + 50) {
                     research = true;
-                    if (score <= alpha - 50) {
-                        alpha = -MATE_SCORE;
-                    } else {
-                        beta = MATE_SCORE;
-                    }
+                    alpha = -MATE_SCORE;
+                    beta = MATE_SCORE;
                     break;
                 }
             }
             research_count++;
         }
 
-        // Update best move and score
         if (current_best_move != 0) {
             best_move = current_best_move;
             best_score = current_best_score;
+            pv_line[0] = current_best_move;
+            pv_len = 1;
         }
 
-        printf("info depth %d score cp %d pv ", depth, best_score);
-        // Print move in algebraic notation if you have that function
-        printf("\n");
+        printf("info depth %d score cp %d\n", depth, (pos->side_to_move == WHITE) ? best_score : -best_score);
 
-        // Found checkmate, no need to search deeper
         if (abs(best_score) > MATE_SCORE - 1000) {
             printf("info string Found mate in %d\n", (MATE_SCORE - abs(best_score) + 1) / 2);
-            break;
+            if (mate_line && mate_length) {
+                mate_line[0] = best_move;
+                *mate_length = 1;
+            }
+            return 2;  // Forced mate detected
         }
+    }
+
+    if (mate_line && mate_length) {
+        mate_line[0] = best_move;
+        *mate_length = 1;
     }
 
     return best_move;

@@ -19,7 +19,7 @@
 
 #define STARTPOS_FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
-int depth = 6;
+int depth = 8;
 
 int main(int argc, char** argv) {
     MagicData* magic = malloc(sizeof(MagicData));

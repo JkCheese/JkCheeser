@@ -8,6 +8,9 @@
 #include <stdio.h>
 #include <time.h>
 
+#define DRAW_SCORE 0
+#define DRAW_PENALTY -20
+
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 int killer_moves[MAX_PLY][2];
@@ -340,15 +343,15 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, int is_pv_nod
     int best_move = 0;
     int stand_pat = 0;
 
-    // Threefold repetition check
-    if (is_threefold_repetition(pos->zobrist_hash)) {
-        int eval = evaluation(pos, params);
-        return eval > 0 ? -50 : 0; // Draw score
-    }
-
     // Push zobrist hash to repetition stack
     int old_index = repetition_index;
     repetition_table[repetition_index++] = pos->zobrist_hash;
+
+    // Repetition draw check
+    if (is_threefold_repetition(pos->zobrist_hash)) {
+        repetition_index = old_index;  // Undo Zobrist push before returning
+        return DRAW_PENALTY;  // Avoid repetition in winning positions
+    }
 
     // TT PROBE
     int tt_score;

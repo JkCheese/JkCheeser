@@ -16,6 +16,13 @@
 #define K_STEP 0.0005
 TrainingEntry training_data[MAX_TRAINING];
 
+const int tropism_feature_idx[6][2] = {
+    [N] = {IDX_TROPISM_KNIGHT_MG, IDX_TROPISM_KNIGHT_EG},
+    [B] = {IDX_TROPISM_BISHOP_MG, IDX_TROPISM_BISHOP_EG},
+    [R] = {IDX_TROPISM_ROOK_MG,   IDX_TROPISM_ROOK_EG},
+    [Q] = {IDX_TROPISM_QUEEN_MG,  IDX_TROPISM_QUEEN_EG}
+};
+
 int load_dataset(const char* path, TrainingEntry* entries, int max_entries) {
     FILE* file = fopen(path, "r");
     if (!file) {
@@ -236,6 +243,36 @@ EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* p
         }
     }
 
+    evaluate_tropism(pos, &counts, NULL, params, WHITE, NULL, NULL, &mg, &eg);
+    for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
+        for (int dist = 0; dist < 8; dist++) {
+            int idx_mg_tropism = tropism_feature_idx[piece_type][0] + dist;
+            int idx_eg_tropism = tropism_feature_idx[piece_type][1] + dist;
+            
+            for (int count = 0; count < counts.tropism[piece_type][dist]; count++) {
+                if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+                    result.features[result.num_features++] = (FeatureContribution){idx_mg_tropism, +1.0};
+                    result.features[result.num_features++] = (FeatureContribution){idx_eg_tropism, +1.0};
+                }
+            }
+        }
+    }
+    evaluate_tropism(pos, &counts, NULL, params, BLACK, NULL, NULL, &mg, &eg);
+    for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
+        for (int dist = 0; dist < 8; dist++) {
+            int idx_mg_tropism = tropism_feature_idx[piece_type][0] + dist;
+            int idx_eg_tropism = tropism_feature_idx[piece_type][1] + dist;
+            
+            for (int count = 0; count < counts.tropism[piece_type][dist]; count++) {
+                if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+                    result.features[result.num_features++] = (FeatureContribution){idx_mg_tropism, +1.0};
+                    result.features[result.num_features++] = (FeatureContribution){idx_eg_tropism, +1.0};
+                }
+            }
+        }
+    }
+
+
     // Apply phase interpolation
     if (phase > 24) phase = 24;
     double mg_weight = (double)phase / 24.0;
@@ -251,6 +288,11 @@ EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* p
             is_mg = true;
         } else if (idx == IDX_PASSED_PAWN_BONUS_MG || idx == IDX_KNIGHT_OUTPOST_BONUS_MG || idx == IDX_ROOK_SEMI_OPEN_FILE_BONUS_MG || idx == IDX_ROOK_OPEN_FILE_BONUS_MG || idx == IDX_BLIND_SWINE_ROOKS_BONUS_MG) {
             is_mg = true;
+        } else if (idx >= IDX_TROPISM_KNIGHT_MG && idx <= IDX_TROPISM_QUEEN_EG) {
+            is_mg = (idx >= IDX_TROPISM_KNIGHT_MG && idx < IDX_TROPISM_KNIGHT_EG) ||
+                    (idx >= IDX_TROPISM_BISHOP_MG && idx < IDX_TROPISM_BISHOP_EG) ||
+                    (idx >= IDX_TROPISM_ROOK_MG && idx < IDX_TROPISM_ROOK_EG) ||
+                    (idx >= IDX_TROPISM_QUEEN_MG && idx < IDX_TROPISM_QUEEN_EG);
         } else {
             // For PST parameters, check the range
             is_mg = (idx >= IDX_PAWN_PST_MG && idx < IDX_PAWN_PST_EG) ||
@@ -262,14 +304,6 @@ EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* p
         }
         result.features[i].weight *= is_mg ? mg_weight : eg_weight;
     }
-
-    // if (pos->side_to_move == BLACK) {
-    //     mg = -mg;
-    //     eg = -eg;
-    //     for (int i = 0; i < result.num_features; i++) {
-    //         result.features[i].weight *= -1.0;
-    //     }
-    // }
 
     result.score = mg_weight * mg + eg_weight * eg;
     return result;
@@ -345,12 +379,18 @@ void convert_params_to_integer(const EvalParamsDouble* in, EvalParams* out) {
 
     out->rook_semi_open_file_bonus_mg = (int)round(in->rook_semi_open_file_bonus_mg);
     out->rook_semi_open_file_bonus_eg = (int)round(in->rook_semi_open_file_bonus_eg);
-
     out->rook_open_file_bonus_mg = (int)round(in->rook_open_file_bonus_mg);
     out->rook_open_file_bonus_eg = (int)round(in->rook_open_file_bonus_eg);
-
     out->blind_swine_rooks_bonus_mg = (int)round(in->blind_swine_rooks_bonus_mg);
-    out->blind_swine_rooks_bonus_eg = (int)round(in->blind_swine_rooks_bonus_eg);}
+    out->blind_swine_rooks_bonus_eg = (int)round(in->blind_swine_rooks_bonus_eg);
+
+    for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
+        for (int dist = 0; dist < 8; dist++) {
+            out->tropism_mg[piece_type][dist] = (int)round(in->tropism_mg[piece_type][dist]);
+            out->tropism_eg[piece_type][dist] = (int)round(in->tropism_eg[piece_type][dist]);
+        }
+    }
+}
 
 void save_evalparams_text(const char* path, const EvalParams* p) {
     FILE* f = fopen(path, "w");
@@ -373,7 +413,7 @@ void save_evalparams_text(const char* path, const EvalParams* p) {
     fprintf(f, "};\n\n");
 
     // PSTs
-    const char* names[] = {
+    const char* pst_names[] = {
         "pawn_pst_mg", "pawn_pst_eg",
         "knight_pst_mg", "knight_pst_eg",
         "bishop_pst_mg", "bishop_pst_eg",
@@ -382,7 +422,7 @@ void save_evalparams_text(const char* path, const EvalParams* p) {
         "king_pst_mg", "king_pst_eg"
     };
 
-    const int* arrays[] = {
+    const int* pst_arrays[] = {
         p->pawn_pst_mg, p->pawn_pst_eg,
         p->knight_pst_mg, p->knight_pst_eg,
         p->bishop_pst_mg, p->bishop_pst_eg,
@@ -391,10 +431,10 @@ void save_evalparams_text(const char* path, const EvalParams* p) {
         p->king_pst_mg, p->king_pst_eg
     };
 
-    for (int a = 0; a < 12; a++) {
-        fprintf(f, "static const int %s[64] = {", names[a]);
-        for (int i = 0; i < 64; i++) {
-            fprintf(f, "%d%s", arrays[a][i], (i < 63 ? ", " : ""));
+    for (int array = 0; array < 12; array++) {
+        fprintf(f, "static const int %s[64] = {", pst_names[array]);
+        for (int sq = 0; sq < 64; sq++) {
+            fprintf(f, "%d%s", pst_arrays[array][sq], (sq < 63 ? ", " : ""));
         }
         fprintf(f, "};\n\n");
     }
@@ -405,7 +445,7 @@ void save_evalparams_text(const char* path, const EvalParams* p) {
 
     // Knight outpost bonuses
     fprintf(f, "static const int knight_outpost_bonus_mg = %d;\n", p->knight_outpost_bonus_mg);
-    fprintf(f, "static const int knight_outpost_bonus_eg = %d;\n", p->knight_outpost_bonus_eg);
+    fprintf(f, "static const int knight_outpost_bonus_eg = %d;\n\n", p->knight_outpost_bonus_eg);
 
     // Semi-open file rook bonuses
     fprintf(f, "static const int rook_semi_open_file_bonus_mg = %d;\n", p->rook_semi_open_file_bonus_mg);
@@ -417,7 +457,26 @@ void save_evalparams_text(const char* path, const EvalParams* p) {
 
     // Rooks on 2nd/7th rank bonuses
     fprintf(f, "static const int blind_swine_rooks_bonus_mg = %d;\n", p->blind_swine_rooks_bonus_mg);
-    fprintf(f, "static const int blind_swine_rooks_bonus_eg = %d;\n", p->blind_swine_rooks_bonus_eg);
+    fprintf(f, "static const int blind_swine_rooks_bonus_eg = %d;\n\n", p->blind_swine_rooks_bonus_eg);
+    
+    // Tropism bonuses
+    fprintf(f, "static const int tropism_mg[6][8] = {\n");
+    for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
+        fprintf(f, "    [%d] = {", piece_type);
+        for (int dist = 0; dist < 8; dist++) {
+            fprintf(f, "%d%s", p->tropism_mg[piece_type][dist], (dist < 7 ? ", " : "},\n"));
+        }
+    }
+    fprintf(f, "};\n\n");
+
+    fprintf(f, "static const int tropism_eg[6][8] = {\n");
+    for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
+        fprintf(f, "    [%d] = {", piece_type);
+        for (int dist = 0; dist < 8; dist++) {
+            fprintf(f, "%d%s", p->tropism_eg[piece_type][dist], (dist < 7 ? ", " : "},\n"));
+        }
+    }
+    fprintf(f, "};\n\n");
 
     // fprintf(f, "};\n");
     fclose(f);
@@ -519,6 +578,17 @@ void run_minibatch_training(
 
         params->blind_swine_rooks_bonus_mg -= current_lr * gradient[IDX_BLIND_SWINE_ROOKS_BONUS_MG];
         params->blind_swine_rooks_bonus_eg -= current_lr * gradient[IDX_BLIND_SWINE_ROOKS_BONUS_EG];
+
+        // Update tropism weights
+        for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
+            for (int dist = 0; dist < 8; dist++) {
+                int idx_mg = tropism_feature_idx[piece_type][0] + dist;
+                int idx_eg = tropism_feature_idx[piece_type][1] + dist;
+
+                params->tropism_mg[piece_type][dist] -= current_lr * gradient[idx_mg];
+                params->tropism_eg[piece_type][dist] -= current_lr * gradient[idx_eg];
+            }
+        }
 
         // Check if loss improved
         double new_loss = compute_loss(params, data, batch_size, sigmoid_k);

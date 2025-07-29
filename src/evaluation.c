@@ -131,6 +131,31 @@ void evaluate_rook_activity(const Position* pos, FeatureCounts* counts, const Ev
     }
 }
 
+void evaluate_tropism(const Position* pos, FeatureCounts* counts, const EvalParams* params, const EvalParamsDouble* dparams, int side, int* mg, int* eg, double* dmg, double* deg) {
+    memset(counts->tropism, 0, sizeof(counts->tropism));
+    int enemy_king_sq = pos->king_from[side ^ 1];  // Get enemy king location
+    int sign = (side == pos->side_to_move) ? +1 : -1;
+
+    for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
+        Bitboard bb = pos->pieces[side == WHITE ? piece_type : piece_type + 6];
+        while (bb) {
+            int sq = pop_lsb(&bb);
+            int dist = manhattan(sq, enemy_king_sq);
+            if (dist > 7) dist = 7;
+
+            counts->tropism[piece_type][dist]++;
+            if (params) {
+                *mg += sign * params->tropism_mg[piece_type][dist];
+                *eg += sign * params->tropism_eg[piece_type][dist];
+            }
+            if (dparams) {
+                *dmg += (double)sign * dparams->tropism_mg[piece_type][dist];
+                *deg += (double)sign * dparams->tropism_eg[piece_type][dist];
+            }
+        }
+    }
+}
+
 int evaluation(const Position* pos, const EvalParams* params) {
     FeatureCounts counts;
     int mg = 0, eg = 0;
@@ -193,6 +218,9 @@ int evaluation(const Position* pos, const EvalParams* params) {
 
     evaluate_knight_outposts(pos, &counts, params, NULL, WHITE, &mg, &eg, NULL, NULL);
     evaluate_knight_outposts(pos, &counts, params, NULL, BLACK, &mg, &eg, NULL, NULL);
+
+    evaluate_tropism(pos, &counts, params, NULL, WHITE, &mg, &eg, NULL, NULL);
+    evaluate_tropism(pos, &counts, params, NULL, BLACK, &mg, &eg, NULL, NULL);
 
     // Cap the phase to 24 (max material)
     if (phase > 24) phase = 24;

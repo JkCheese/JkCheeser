@@ -54,7 +54,7 @@ typedef enum {
 } Color;
 
 typedef enum {
-    P, N, B, R, Q, K, EMPTY
+    P, N, B, R, Q, K
 } PieceType;
 
 typedef enum {

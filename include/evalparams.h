@@ -33,7 +33,16 @@
 #define IDX_BLIND_SWINE_ROOKS_BONUS_MG 788
 #define IDX_BLIND_SWINE_ROOKS_BONUS_EG 789
 
-#define NUM_EVAL_PARAMS 790
+#define IDX_TROPISM_KNIGHT_MG 790
+#define IDX_TROPISM_KNIGHT_EG 798
+#define IDX_TROPISM_BISHOP_MG 806
+#define IDX_TROPISM_BISHOP_EG 814
+#define IDX_TROPISM_ROOK_MG 822
+#define IDX_TROPISM_ROOK_EG 830
+#define IDX_TROPISM_QUEEN_MG 838
+#define IDX_TROPISM_QUEEN_EG 846
+
+#define NUM_EVAL_PARAMS 854
 
 typedef struct {
     int mg_value[6];  // P, N, B, R, Q, K
@@ -64,6 +73,9 @@ typedef struct {
     int rook_semi_open_file_bonus_eg;
     int rook_open_file_bonus_eg;
     int blind_swine_rooks_bonus_eg;
+    
+    int tropism_mg[6][8];
+    int tropism_eg[6][8];
 } EvalParams;
 
 // --- Double-precision Evaluation Parameters ---
@@ -96,6 +108,9 @@ typedef struct {
     double rook_semi_open_file_bonus_eg;
     double rook_open_file_bonus_eg;
     double blind_swine_rooks_bonus_eg;
+
+    double tropism_mg[6][8];
+    double tropism_eg[6][8];
 } EvalParamsDouble;
 
 void set_default_evalparams(EvalParams* p);

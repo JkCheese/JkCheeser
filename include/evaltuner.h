@@ -18,12 +18,16 @@ typedef struct {
     int rook_semi_open_file_bonus;
     int rook_open_file_bonus;
     int blind_swine_rooks_bonus;
+
+    int tropism[6][8];
 } FeatureCounts;
 
 typedef struct {
     int index;       // Linear index of the parameter used
     double weight;   // How much it contributed to the final eval
 } FeatureContribution;
+
+extern const int tropism_feature_idx[6][2];
 
 #define MAX_FEATURES_PER_POSITION 2048
 

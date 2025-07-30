@@ -61,12 +61,12 @@ int main(int argc, char** argv) {
     // }
     // printf("Detected %d non-zero weighted features\n", result.num_features - zero_weight_features);
 
-    // uci_loop(&pos, &list, &state, depth, magic, keys);
-    if (argc >= 3) {
-        run_tuner_main(argv[1], argv[2]);
-    } else {
-        fprintf(stderr, "Usage: %s <dataset.txt> <output_prefix>\n", argv[0]);
-    }
+    uci_loop(&pos, &list, &state, depth, magic, keys);
+    // if (argc >= 3) {
+    //     run_tuner_main(magic, argv[1], argv[2]);
+    // } else {
+    //     fprintf(stderr, "Usage: %s <dataset.txt> <output_prefix>\n", argv[0]);
+    // }
     free(magic);
     free(keys);
     return 0;

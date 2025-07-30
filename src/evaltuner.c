@@ -10,7 +10,7 @@
 
 #define MAX_TRAINING 100000
 #define MAX_ITERATIONS 1000
-#define LEARNING_RATE 0.01
+#define LEARNING_RATE 100000
 #define K_START 0.0005
 #define K_END 0.01
 #define K_STEP 0.0005
@@ -21,6 +21,13 @@ const int tropism_feature_idx[6][2] = {
     [B] = {IDX_TROPISM_BISHOP_MG, IDX_TROPISM_BISHOP_EG},
     [R] = {IDX_TROPISM_ROOK_MG,   IDX_TROPISM_ROOK_EG},
     [Q] = {IDX_TROPISM_QUEEN_MG,  IDX_TROPISM_QUEEN_EG}
+};
+
+const int king_zone_feature_idx[6][2] = {
+    [N] = {IDX_KING_ZONE_KNIGHT_MG, IDX_KING_ZONE_KNIGHT_EG},
+    [B] = {IDX_KING_ZONE_BISHOP_MG, IDX_KING_ZONE_BISHOP_EG},
+    [R] = {IDX_KING_ZONE_ROOK_MG,   IDX_KING_ZONE_ROOK_EG},
+    [Q] = {IDX_KING_ZONE_QUEEN_MG,  IDX_KING_ZONE_QUEEN_EG}
 };
 
 int load_dataset(const char* path, TrainingEntry* entries, int max_entries) {
@@ -65,7 +72,7 @@ static double compute_gradient_norm(const double* gradient) {
     return sqrt(norm);
 }
 
-EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* params) {
+EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* params, const MagicData* magic) {
     FeatureCounts counts = {0};
     EvalResult result;
     result.score = 0.0;
@@ -156,91 +163,72 @@ EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* p
 
     evaluate_passed_pawns(pos, &counts, NULL, params, WHITE, NULL, NULL, &mg, &eg);
     int passed_pawn_count_white = counts.passed_pawn_bonus;
+    if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+        result.features[result.num_features++] = (FeatureContribution){IDX_PASSED_PAWN_BONUS_MG, +(double)passed_pawn_count_white};
+        result.features[result.num_features++] = (FeatureContribution){IDX_PASSED_PAWN_BONUS_EG, +(double)passed_pawn_count_white};
+    }
+
     evaluate_passed_pawns(pos, &counts, NULL, params, BLACK, NULL, NULL, &mg, &eg);
     int passed_pawn_count_black = counts.passed_pawn_bonus;
-
-    for (int i = 0; i < passed_pawn_count_white; i++) {
-        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
-            result.features[result.num_features++] = (FeatureContribution){IDX_PASSED_PAWN_BONUS_MG, +1.0};
-            result.features[result.num_features++] = (FeatureContribution){IDX_PASSED_PAWN_BONUS_EG, +1.0};
-        }
-    }
-    
-    for (int i = 0; i < passed_pawn_count_black; i++) {
-        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
-            result.features[result.num_features++] = (FeatureContribution){IDX_PASSED_PAWN_BONUS_MG, -1.0};
-            result.features[result.num_features++] = (FeatureContribution){IDX_PASSED_PAWN_BONUS_EG, -1.0};
-        }
+    if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+        result.features[result.num_features++] = (FeatureContribution){IDX_PASSED_PAWN_BONUS_MG, -(double)passed_pawn_count_black};
+        result.features[result.num_features++] = (FeatureContribution){IDX_PASSED_PAWN_BONUS_EG, -(double)passed_pawn_count_black};
     }
 
     evaluate_knight_outposts(pos, &counts, NULL, params, WHITE, NULL, NULL, &mg, &eg);
     int knight_outpost_count_white = counts.knight_outpost_bonus;
+    if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+        result.features[result.num_features++] = (FeatureContribution){IDX_KNIGHT_OUTPOST_BONUS_MG, +(double)knight_outpost_count_white};
+        result.features[result.num_features++] = (FeatureContribution){IDX_KNIGHT_OUTPOST_BONUS_EG, +(double)knight_outpost_count_white};
+    }
+
     evaluate_knight_outposts(pos, &counts, NULL, params, BLACK, NULL, NULL, &mg, &eg);
     int knight_outpost_count_black = counts.knight_outpost_bonus;
-
-    for (int i = 0; i < knight_outpost_count_white; i++) {
-        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
-            result.features[result.num_features++] = (FeatureContribution){IDX_KNIGHT_OUTPOST_BONUS_MG, +1.0};
-            result.features[result.num_features++] = (FeatureContribution){IDX_KNIGHT_OUTPOST_BONUS_EG, +1.0};
-        }
-    }
-    
-    for (int i = 0; i < knight_outpost_count_black; i++) {
-        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
-            result.features[result.num_features++] = (FeatureContribution){IDX_KNIGHT_OUTPOST_BONUS_MG, -1.0};
-            result.features[result.num_features++] = (FeatureContribution){IDX_KNIGHT_OUTPOST_BONUS_EG, -1.0};
-        }
+    if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+        result.features[result.num_features++] = (FeatureContribution){IDX_KNIGHT_OUTPOST_BONUS_MG, -(double)knight_outpost_count_black};
+        result.features[result.num_features++] = (FeatureContribution){IDX_KNIGHT_OUTPOST_BONUS_EG, -(double)knight_outpost_count_black};
     }
 
     evaluate_rook_activity(pos, &counts, NULL, params, WHITE, NULL, NULL, &mg, &eg);
+
     int semi_open_file_rook_count_white = counts.rook_semi_open_file_bonus;
     int open_file_rook_count_white = counts.rook_open_file_bonus;
     int blind_swine_rook_count_white = counts.blind_swine_rooks_bonus;
+
+    if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+        result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_SEMI_OPEN_FILE_BONUS_MG, +(double)semi_open_file_rook_count_white};
+        result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_SEMI_OPEN_FILE_BONUS_EG, +(double)semi_open_file_rook_count_white};
+    }
+    
+    if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+        result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_OPEN_FILE_BONUS_MG, +(double)open_file_rook_count_white};
+        result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_OPEN_FILE_BONUS_EG, +(double)open_file_rook_count_white};
+    }
+    
+    if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+        result.features[result.num_features++] = (FeatureContribution){IDX_BLIND_SWINE_ROOKS_BONUS_MG, +(double)blind_swine_rook_count_white};
+        result.features[result.num_features++] = (FeatureContribution){IDX_BLIND_SWINE_ROOKS_BONUS_EG, +(double)blind_swine_rook_count_white};
+    }
+
     evaluate_rook_activity(pos, &counts, NULL, params, BLACK, NULL, NULL, &mg, &eg);
+
     int semi_open_file_rook_count_black = counts.rook_semi_open_file_bonus;
     int open_file_rook_count_black = counts.rook_open_file_bonus;
     int blind_swine_rook_count_black = counts.blind_swine_rooks_bonus;
 
-    for (int i = 0; i < semi_open_file_rook_count_white; i++) {
-        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
-            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_SEMI_OPEN_FILE_BONUS_MG, +1.0};
-            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_SEMI_OPEN_FILE_BONUS_EG, +1.0};
-        }
-    }
-    
-    for (int i = 0; i < semi_open_file_rook_count_black; i++) {
-        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
-            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_SEMI_OPEN_FILE_BONUS_MG, -1.0};
-            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_SEMI_OPEN_FILE_BONUS_EG, -1.0};
-        }
+    if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+        result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_SEMI_OPEN_FILE_BONUS_MG, -(double)semi_open_file_rook_count_black};
+        result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_SEMI_OPEN_FILE_BONUS_EG, -(double)semi_open_file_rook_count_black};
     }
 
-    for (int i = 0; i < open_file_rook_count_white; i++) {
-        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
-            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_OPEN_FILE_BONUS_MG, +1.0};
-            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_OPEN_FILE_BONUS_EG, +1.0};
-        }
+    if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+        result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_OPEN_FILE_BONUS_MG, -(double)open_file_rook_count_black};
+        result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_OPEN_FILE_BONUS_EG, -(double)open_file_rook_count_black};
     }
     
-    for (int i = 0; i < open_file_rook_count_black; i++) {
-        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
-            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_OPEN_FILE_BONUS_MG, -1.0};
-            result.features[result.num_features++] = (FeatureContribution){IDX_ROOK_OPEN_FILE_BONUS_EG, -1.0};
-        }
-    }
-
-    for (int i = 0; i < blind_swine_rook_count_white; i++) {
-        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
-            result.features[result.num_features++] = (FeatureContribution){IDX_BLIND_SWINE_ROOKS_BONUS_MG, +1.0};
-            result.features[result.num_features++] = (FeatureContribution){IDX_BLIND_SWINE_ROOKS_BONUS_EG, +1.0};
-        }
-    }
-    
-    for (int i = 0; i < blind_swine_rook_count_black; i++) {
-        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
-            result.features[result.num_features++] = (FeatureContribution){IDX_BLIND_SWINE_ROOKS_BONUS_MG, -1.0};
-            result.features[result.num_features++] = (FeatureContribution){IDX_BLIND_SWINE_ROOKS_BONUS_EG, -1.0};
-        }
+    if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+        result.features[result.num_features++] = (FeatureContribution){IDX_BLIND_SWINE_ROOKS_BONUS_MG, -(double)blind_swine_rook_count_black};
+        result.features[result.num_features++] = (FeatureContribution){IDX_BLIND_SWINE_ROOKS_BONUS_EG, -(double)blind_swine_rook_count_black};
     }
 
     evaluate_tropism(pos, &counts, NULL, params, WHITE, NULL, NULL, &mg, &eg);
@@ -249,29 +237,64 @@ EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* p
             int idx_mg_tropism = tropism_feature_idx[piece_type][0] + dist;
             int idx_eg_tropism = tropism_feature_idx[piece_type][1] + dist;
             
-            for (int count = 0; count < counts.tropism[piece_type][dist]; count++) {
-                if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
-                    result.features[result.num_features++] = (FeatureContribution){idx_mg_tropism, +1.0};
-                    result.features[result.num_features++] = (FeatureContribution){idx_eg_tropism, +1.0};
-                }
+            int tropism_count = counts.tropism[piece_type][dist];
+            
+            if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+                result.features[result.num_features++] = (FeatureContribution){idx_mg_tropism, +(double)tropism_count};
+                result.features[result.num_features++] = (FeatureContribution){idx_eg_tropism, +(double)tropism_count};
             }
         }
     }
+
     evaluate_tropism(pos, &counts, NULL, params, BLACK, NULL, NULL, &mg, &eg);
     for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
         for (int dist = 0; dist < 8; dist++) {
             int idx_mg_tropism = tropism_feature_idx[piece_type][0] + dist;
             int idx_eg_tropism = tropism_feature_idx[piece_type][1] + dist;
             
-            for (int count = 0; count < counts.tropism[piece_type][dist]; count++) {
-                if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
-                    result.features[result.num_features++] = (FeatureContribution){idx_mg_tropism, +1.0};
-                    result.features[result.num_features++] = (FeatureContribution){idx_eg_tropism, +1.0};
-                }
+            int tropism_count = counts.tropism[piece_type][dist];
+
+            if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+                result.features[result.num_features++] = (FeatureContribution){idx_mg_tropism, -(double)tropism_count};
+                result.features[result.num_features++] = (FeatureContribution){idx_eg_tropism, -(double)tropism_count};
             }
         }
     }
 
+    
+    evaluate_king_safety(pos, magic, &counts, NULL, params, WHITE, NULL, NULL, &mg, &eg);
+    int attacker_count_white = (counts.king_zone_attacker_count > 8) ? 8 : counts.king_zone_attacker_count;
+    
+    for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
+        
+        int hits = counts.king_zone_hits_by_type[piece_type];
+        if (!hits) continue;
+
+        int idx_mg_king_zone = king_zone_feature_idx[piece_type][0] + attacker_count_white;
+        int idx_eg_king_zone = king_zone_feature_idx[piece_type][1] + attacker_count_white;
+        
+        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+            result.features[result.num_features++] = (FeatureContribution){idx_mg_king_zone, +(double)hits};
+            result.features[result.num_features++] = (FeatureContribution){idx_eg_king_zone, +(double)hits};
+        }
+    }
+
+    evaluate_king_safety(pos, magic, &counts, NULL, params, BLACK, NULL, NULL, &mg, &eg);
+    int attacker_count_black = (counts.king_zone_attacker_count > 8) ? 8 : counts.king_zone_attacker_count;
+    
+    for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
+        
+        int hits = counts.king_zone_hits_by_type[piece_type];
+        if (!hits) continue;
+
+        int idx_mg_king_zone = king_zone_feature_idx[piece_type][0] + attacker_count_black;
+        int idx_eg_king_zone = king_zone_feature_idx[piece_type][1] + attacker_count_black;
+        
+        if (result.num_features + 2 < MAX_FEATURES_PER_POSITION) {
+            result.features[result.num_features++] = (FeatureContribution){idx_mg_king_zone, -(double)hits};
+            result.features[result.num_features++] = (FeatureContribution){idx_eg_king_zone, -(double)hits};
+        }
+    }
 
     // Apply phase interpolation
     if (phase > 24) phase = 24;
@@ -293,6 +316,12 @@ EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* p
                     (idx >= IDX_TROPISM_BISHOP_MG && idx < IDX_TROPISM_BISHOP_EG) ||
                     (idx >= IDX_TROPISM_ROOK_MG && idx < IDX_TROPISM_ROOK_EG) ||
                     (idx >= IDX_TROPISM_QUEEN_MG && idx < IDX_TROPISM_QUEEN_EG);
+
+        } else if (idx >= IDX_KING_ZONE_KNIGHT_MG && idx <= IDX_KING_ZONE_QUEEN_EG) {
+            is_mg = (idx >= IDX_KING_ZONE_KNIGHT_MG && idx < IDX_KING_ZONE_KNIGHT_EG) ||
+                    (idx >= IDX_KING_ZONE_BISHOP_MG && idx < IDX_KING_ZONE_BISHOP_EG) ||
+                    (idx >= IDX_KING_ZONE_ROOK_MG && idx < IDX_KING_ZONE_ROOK_EG) ||
+                    (idx >= IDX_KING_ZONE_QUEEN_MG && idx < IDX_KING_ZONE_QUEEN_EG);
         } else {
             // For PST parameters, check the range
             is_mg = (idx >= IDX_PAWN_PST_MG && idx < IDX_PAWN_PST_EG) ||
@@ -309,12 +338,12 @@ EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* p
     return result;
 }
 
-double find_best_k(const EvalParamsDouble* params, const TrainingEntry* data, int n) {
+double find_best_k(const MagicData* magic, const EvalParamsDouble* params, const TrainingEntry* data, int n) {
     double best_k = K_START;
     double best_loss = 1e9;
 
     for (double k = K_START; k <= K_END; k += K_STEP) {
-        double loss = compute_loss(params, data, n, k);
+        double loss = compute_loss(magic, params, data, n, k);
         printf("Try k = %.4f -> Loss = %.6f\n", k, loss);
         if (loss < best_loss) {
             best_loss = loss;
@@ -334,13 +363,13 @@ double sigmoid_derivative(double x, double k) {
     return k * s * (1.0 - s);
 }
 
-double compute_loss(const EvalParamsDouble* params, const TrainingEntry* data, int n, double k) {
+double compute_loss(const MagicData* magic, const EvalParamsDouble* params, const TrainingEntry* data, int n, double k) {
     double loss = 0.0;
     Position pos;
 
     for (int i = 0; i < n; i++) {
         init_position(&pos, data[i].fen);
-        EvalResult r = evaluate_with_features(&pos, params);
+        EvalResult r = evaluate_with_features(&pos, params, magic);
         double p = sigmoid(r.score, k);
         double e = p - data[i].wdl;
         loss += e * e;
@@ -388,6 +417,13 @@ void convert_params_to_integer(const EvalParamsDouble* in, EvalParams* out) {
         for (int dist = 0; dist < 8; dist++) {
             out->tropism_mg[piece_type][dist] = (int)round(in->tropism_mg[piece_type][dist]);
             out->tropism_eg[piece_type][dist] = (int)round(in->tropism_eg[piece_type][dist]);
+        }
+    }
+
+    for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
+        for (int attacker_count = 0; attacker_count <= 8; attacker_count++) {
+            out->king_zone_attacker_mg[piece_type][attacker_count] = (int)round(in->king_zone_attacker_mg[piece_type][attacker_count]);
+            out->king_zone_attacker_eg[piece_type][attacker_count] = (int)round(in->king_zone_attacker_eg[piece_type][attacker_count]);
         }
     }
 }
@@ -478,19 +514,32 @@ void save_evalparams_text(const char* path, const EvalParams* p) {
     }
     fprintf(f, "};\n\n");
 
+    // King Zone Attacker bonuses
+    fprintf(f, "static const int king_zone_attacker_mg[6][9] = {\n");
+    for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
+        fprintf(f, "    [%d] = {", piece_type);
+        for (int attacker_count = 0; attacker_count < 9; attacker_count++) {
+            fprintf(f, "%d%s", p->king_zone_attacker_mg[piece_type][attacker_count], (attacker_count < 8 ? ", " : "},\n"));
+        }
+    }
+    fprintf(f, "};\n\n");
+
+    fprintf(f, "static const int king_zone_attacker_eg[6][9] = {\n");
+    for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
+        fprintf(f, "    [%d] = {", piece_type);
+        for (int attacker_count = 0; attacker_count < 9; attacker_count++) {
+            fprintf(f, "%d%s", p->king_zone_attacker_eg[piece_type][attacker_count], (attacker_count < 8 ? ", " : "},\n"));
+        }
+    }
+    fprintf(f, "};");
+
     // fprintf(f, "};\n");
     fclose(f);
     printf("Saved text params to %s\n", path);
 }
 
 void run_minibatch_training(
-    EvalParamsDouble* params,
-    const TrainingEntry* data,
-    int batch_size,
-    double learning_rate,
-    int iterations,
-    double sigmoid_k,
-    const char* output_file
+    const MagicData* magic, EvalParamsDouble* params, const TrainingEntry* data, int batch_size, double learning_rate, int iterations, double sigmoid_k, const char* output_file
 ) {
     double* gradient = calloc(NUM_EVAL_PARAMS, sizeof(double));
     if (!gradient) return;
@@ -509,7 +558,7 @@ void run_minibatch_training(
             const TrainingEntry* entry = &data[i];
 
             init_position(&pos, entry->fen);
-            EvalResult result = evaluate_with_features(&pos, params);
+            EvalResult result = evaluate_with_features(&pos, params, magic);
             
             // Score from white's perspective
             double white_score = result.score;
@@ -590,8 +639,18 @@ void run_minibatch_training(
             }
         }
 
+        for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
+            for (int attacker_count = 0; attacker_count < 9; attacker_count++) {
+                int idx_mg = king_zone_feature_idx[piece_type][0] + attacker_count;
+                int idx_eg = king_zone_feature_idx[piece_type][1] + attacker_count;
+
+                params->king_zone_attacker_mg[piece_type][attacker_count] -= current_lr * gradient[idx_mg];
+                params->king_zone_attacker_eg[piece_type][attacker_count] -= current_lr * gradient[idx_eg];
+            }
+        }
+
         // Check if loss improved
-        double new_loss = compute_loss(params, data, batch_size, sigmoid_k);
+        double new_loss = compute_loss(magic, params, data, batch_size, sigmoid_k);
         
         if (new_loss < prev_loss) {
             // Good update, slightly increase learning rate
@@ -626,7 +685,7 @@ void run_minibatch_training(
     free(gradient);
 }
 
-void run_tuner_main(const char* dataset_path, const char* output_prefix) {
+void run_tuner_main(const MagicData* magic, const char* dataset_path, const char* output_prefix) {
     int num_entries = load_dataset(dataset_path, training_data, MAX_TRAINING);
     if (num_entries <= 0) {
         fprintf(stderr, "Failed to load dataset from %s\n", dataset_path);
@@ -638,11 +697,12 @@ void run_tuner_main(const char* dataset_path, const char* output_prefix) {
     EvalParamsDouble params;
     init_double_params(&params);
 
-    double k = find_best_k(&params, training_data, num_entries);
+    double k = find_best_k(magic, &params, training_data, num_entries);
 
     printf("Before training: mg_value[0] = %.3f\n", params.mg_value[0]);
     
     run_minibatch_training(
+        magic,
         &params,
         training_data,
         num_entries,
@@ -652,5 +712,10 @@ void run_tuner_main(const char* dataset_path, const char* output_prefix) {
         output_prefix
     );
     
-    printf("After training:  rook_open_file_bonus_eg = %.10f\n", params.rook_open_file_bonus_eg);
+    printf("After training: knight_outpost_bonus_mg = %.20f\n", params.knight_outpost_bonus_mg);
+    printf("After training: knight_outpost_bonus_eg = %.20f\n", params.knight_outpost_bonus_eg);
+    printf("After training: blind_swine_rooks_bonus_eg = %.20f\n", params.blind_swine_rooks_bonus_mg);
+    printf("After training: blind_swine_rooks_bonus_eg = %.20f\n", params.blind_swine_rooks_bonus_eg);
+    printf("After training: tropism_mg[2][6] = %.20f\n", params.tropism_mg[2][6]);
+    printf("After training: tropism_mg[2][7] = %.20f\n", params.tropism_mg[2][7]);
 }

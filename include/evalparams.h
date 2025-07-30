@@ -42,7 +42,16 @@
 #define IDX_TROPISM_QUEEN_MG 838
 #define IDX_TROPISM_QUEEN_EG 846
 
-#define NUM_EVAL_PARAMS 854
+#define IDX_KING_ZONE_KNIGHT_MG 854
+#define IDX_KING_ZONE_KNIGHT_EG 863
+#define IDX_KING_ZONE_BISHOP_MG 872
+#define IDX_KING_ZONE_BISHOP_EG 881
+#define IDX_KING_ZONE_ROOK_MG 890
+#define IDX_KING_ZONE_ROOK_EG 899
+#define IDX_KING_ZONE_QUEEN_MG 908
+#define IDX_KING_ZONE_QUEEN_EG 917
+
+#define NUM_EVAL_PARAMS 926
 
 typedef struct {
     int mg_value[6];  // P, N, B, R, Q, K
@@ -76,6 +85,9 @@ typedef struct {
     
     int tropism_mg[6][8];
     int tropism_eg[6][8];
+
+    int king_zone_attacker_mg[6][9];
+    int king_zone_attacker_eg[6][9];
 } EvalParams;
 
 // --- Double-precision Evaluation Parameters ---
@@ -111,6 +123,9 @@ typedef struct {
 
     double tropism_mg[6][8];
     double tropism_eg[6][8];
+
+    double king_zone_attacker_mg[6][9];
+    double king_zone_attacker_eg[6][9];
 } EvalParamsDouble;
 
 void set_default_evalparams(EvalParams* p);

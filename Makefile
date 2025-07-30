@@ -18,7 +18,7 @@ SRC = \
 	src/zobrist.c
 
 OBJ = $(SRC:.c=.o)
-BIN = v9_1-tropism
+BIN = v9_1-king_safety_tropism
 
 all: $(BIN)
 

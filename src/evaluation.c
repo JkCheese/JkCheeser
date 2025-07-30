@@ -1,3 +1,4 @@
+#include "board.h"
 #include "evaluation.h"
 #include "movegen.h"
 #include "operations.h"
@@ -8,7 +9,8 @@ void evaluate_passed_pawns(const Position* pos, FeatureCounts* counts, const Eva
     Bitboard pawns = pos->pieces[side == WHITE ? WP : BP];
     Bitboard enemy_pawns = pos->pieces[side == WHITE ? BP : WP];
 
-    int sign = (side == pos->side_to_move) ? +1 : -1;
+    int eval_sign = (side == pos->side_to_move) ? +1 : -1;
+    int feat_sign = (side == WHITE) ? +1 : -1;
 
     while (pawns) {
         int sq = pop_lsb(&pawns);
@@ -25,12 +27,12 @@ void evaluate_passed_pawns(const Position* pos, FeatureCounts* counts, const Eva
         counts->passed_pawn_bonus++;
 
         if (params) {
-            *mg += sign * params->passed_pawn_bonus_mg;
-            *eg += sign * params->passed_pawn_bonus_eg;
+            *mg += eval_sign * params->passed_pawn_bonus_mg;
+            *eg += eval_sign * params->passed_pawn_bonus_eg;
         }
         if (dparams) {
-            *dmg += (double)sign * dparams->passed_pawn_bonus_mg;
-            *deg += (double)sign * dparams->passed_pawn_bonus_eg;
+            *dmg += (double)feat_sign * dparams->passed_pawn_bonus_mg;
+            *deg += (double)feat_sign * dparams->passed_pawn_bonus_eg;
         }
     }
 }
@@ -42,7 +44,8 @@ void evaluate_knight_outposts(const Position* pos, FeatureCounts* counts, const 
     Bitboard own_pawns = pos->pieces[side == WHITE ? WP : BP];
     Bitboard enemy_pawns = pos->pieces[side == WHITE ? BP : WP];
 
-    int sign = (side == pos->side_to_move) ? +1 : -1;
+    int eval_sign = (side == pos->side_to_move) ? +1 : -1;
+    int feat_sign = (side == WHITE) ? +1 : -1;
 
     while (knights) {
         int sq = pop_lsb(&knights);
@@ -68,26 +71,27 @@ void evaluate_knight_outposts(const Position* pos, FeatureCounts* counts, const 
         counts->knight_outpost_bonus++;
 
         if (params) {
-            *mg += sign * params->knight_outpost_bonus_mg;
-            *eg += sign * params->knight_outpost_bonus_eg;
+            *mg += eval_sign * params->knight_outpost_bonus_mg;
+            *eg += eval_sign * params->knight_outpost_bonus_eg;
         }
         if (dparams) {
-            *dmg += (double)sign * dparams->knight_outpost_bonus_mg;
-            *deg += (double)sign * dparams->knight_outpost_bonus_eg;
+            *dmg += (double)feat_sign * dparams->knight_outpost_bonus_mg;
+            *deg += (double)feat_sign * dparams->knight_outpost_bonus_eg;
         }
     }
 }
 
 void evaluate_rook_activity(const Position* pos, FeatureCounts* counts, const EvalParams* params, const EvalParamsDouble* dparams, int side, int* mg, int* eg, double* dmg, double* deg) {
     counts->rook_semi_open_file_bonus = 0;
-    counts->rook_semi_open_file_bonus = 0;
     counts->rook_open_file_bonus = 0;
+    counts->blind_swine_rooks_bonus = 0;
 
     Bitboard rooks = pos->pieces[side == WHITE ? WR : BR];
     Bitboard own_pawns = pos->pieces[side == WHITE ? WP : BP];
     Bitboard enemy_pawns = pos->pieces[side == WHITE ? BP : WP];
 
-    int sign = (side == pos->side_to_move) ? +1 : -1;
+    int eval_sign = (side == pos->side_to_move) ? +1 : -1;
+    int feat_sign = (side == WHITE) ? +1 : -1;
 
     while (rooks) {
         int sq = pop_lsb(&rooks);
@@ -95,38 +99,93 @@ void evaluate_rook_activity(const Position* pos, FeatureCounts* counts, const Ev
         if ((side == WHITE && RANK(sq) == 6) || (side == BLACK && RANK(sq) == 1)) {
             counts->blind_swine_rooks_bonus++;
             if (params) {
-                *mg += sign * params->blind_swine_rooks_bonus_mg;
-                *eg += sign * params->blind_swine_rooks_bonus_eg;
+                *mg += eval_sign * params->blind_swine_rooks_bonus_mg;
+                *eg += eval_sign * params->blind_swine_rooks_bonus_eg;
             }
             if (dparams) {
-                *dmg += (double)sign * dparams->blind_swine_rooks_bonus_mg;
-                *deg += (double)sign * dparams->blind_swine_rooks_bonus_eg;
+                *dmg += (double)feat_sign * dparams->blind_swine_rooks_bonus_mg;
+                *deg += (double)feat_sign * dparams->blind_swine_rooks_bonus_eg;
             }
         }
-        if (FILE(sq) & own_pawns) {
+        if (FILE_X(FILE(sq)) & own_pawns) {
             continue;
         }
-        else if (FILE(sq) & enemy_pawns) {
+        else if (FILE_X(FILE(sq)) & enemy_pawns) {
             counts->rook_semi_open_file_bonus++;
             if (params) {
-                *mg += sign * params->rook_semi_open_file_bonus_mg;
-                *eg += sign * params->rook_semi_open_file_bonus_eg;
+                *mg += eval_sign * params->rook_semi_open_file_bonus_mg;
+                *eg += eval_sign * params->rook_semi_open_file_bonus_eg;
             }
             if (dparams) {
-                *dmg += (double)sign * dparams->rook_semi_open_file_bonus_mg;
-                *deg += (double)sign * dparams->rook_semi_open_file_bonus_eg;
+                *dmg += (double)feat_sign * dparams->rook_semi_open_file_bonus_mg;
+                *deg += (double)feat_sign * dparams->rook_semi_open_file_bonus_eg;
             }
         }
         else {
             counts->rook_open_file_bonus++;
             if (params) {
-                *mg += sign * params->rook_open_file_bonus_mg;
-                *eg += sign * params->rook_open_file_bonus_eg;
+                *mg += eval_sign * params->rook_open_file_bonus_mg;
+                *eg += eval_sign * params->rook_open_file_bonus_eg;
             }
             if (dparams) {
-                *dmg += (double)sign * dparams->rook_open_file_bonus_mg;
-                *deg += (double)sign * dparams->rook_open_file_bonus_eg;
+                *dmg += (double)feat_sign * dparams->rook_open_file_bonus_mg;
+                *deg += (double)feat_sign * dparams->rook_open_file_bonus_eg;
             }
+        }
+    }
+}
+
+void evaluate_king_safety(const Position* pos, const MagicData* magic, FeatureCounts* counts, const EvalParams* params, const EvalParamsDouble* dparams, int side, int* mg, int* eg, double* dmg, double* deg) {
+    memset(counts->king_zone_hits_by_type, 0, sizeof(counts->king_zone_hits_by_type));
+    counts->king_zone_attacker_count = 0;
+
+    int eval_sign = (side == pos->side_to_move) ? +1 : -1;
+    int feat_sign = (side == WHITE) ? +1 : -1;
+
+    int enemy_king_sq = pos->king_from[side ^ 1];
+    Bitboard enemy_king_zone = king_attacks(enemy_king_sq) | (1ULL << enemy_king_sq);
+    Bitboard occupied = pos->occupied[ALL];
+
+    for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
+        Bitboard bb = pos->pieces[side == WHITE ? piece_type : piece_type + 6];
+
+        while (bb) {
+            int sq = pop_lsb(&bb);
+            Bitboard attacks = 0;
+            switch (piece_type) {
+                case N:
+                    attacks = knight_attacks(sq);
+                    break;
+                case B:
+                    attacks = bishop_attacks(sq, occupied, magic);
+                    break;
+                case R:
+                    attacks = rook_attacks(sq, occupied, magic);
+                    break;
+                case Q:
+                    attacks = queen_attacks(sq, occupied, magic);
+                    break;
+            }
+            int hits = count_bits(attacks & enemy_king_zone);
+            if (hits > 0) {
+                counts->king_zone_attacker_count++;
+                counts->king_zone_hits_by_type[piece_type] += hits;
+            }
+        }
+    }
+
+    int attacker_count = (counts->king_zone_attacker_count > 8) ? 8 : counts->king_zone_attacker_count;
+
+    for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
+        int hits = counts->king_zone_hits_by_type[piece_type];
+        if (!hits) continue;
+        if (params) {
+            *mg += eval_sign * hits * params->king_zone_attacker_mg[piece_type][attacker_count];
+            *eg += eval_sign * hits * params->king_zone_attacker_eg[piece_type][attacker_count];
+        }
+        if (dparams) {
+            *dmg += (double)feat_sign * (double)hits * dparams->king_zone_attacker_mg[piece_type][attacker_count];
+            *deg += (double)feat_sign * (double)hits * dparams->king_zone_attacker_eg[piece_type][attacker_count];
         }
     }
 }
@@ -134,7 +193,8 @@ void evaluate_rook_activity(const Position* pos, FeatureCounts* counts, const Ev
 void evaluate_tropism(const Position* pos, FeatureCounts* counts, const EvalParams* params, const EvalParamsDouble* dparams, int side, int* mg, int* eg, double* dmg, double* deg) {
     memset(counts->tropism, 0, sizeof(counts->tropism));
     int enemy_king_sq = pos->king_from[side ^ 1];  // Get enemy king location
-    int sign = (side == pos->side_to_move) ? +1 : -1;
+    int eval_sign = (side == pos->side_to_move) ? +1 : -1;
+    int feat_sign = (side == WHITE) ? +1 : -1;
 
     for (PieceType piece_type = N; piece_type <= Q; piece_type++) {
         Bitboard bb = pos->pieces[side == WHITE ? piece_type : piece_type + 6];
@@ -145,18 +205,18 @@ void evaluate_tropism(const Position* pos, FeatureCounts* counts, const EvalPara
 
             counts->tropism[piece_type][dist]++;
             if (params) {
-                *mg += sign * params->tropism_mg[piece_type][dist];
-                *eg += sign * params->tropism_eg[piece_type][dist];
+                *mg += eval_sign * params->tropism_mg[piece_type][dist];
+                *eg += eval_sign * params->tropism_eg[piece_type][dist];
             }
             if (dparams) {
-                *dmg += (double)sign * dparams->tropism_mg[piece_type][dist];
-                *deg += (double)sign * dparams->tropism_eg[piece_type][dist];
+                *dmg += (double)feat_sign * dparams->tropism_mg[piece_type][dist];
+                *deg += (double)feat_sign * dparams->tropism_eg[piece_type][dist];
             }
         }
     }
 }
 
-int evaluation(const Position* pos, const EvalParams* params) {
+int evaluation(const Position* pos, const EvalParams* params, const MagicData* magic) {
     FeatureCounts counts;
     int mg = 0, eg = 0;
     int phase = 0;
@@ -218,6 +278,12 @@ int evaluation(const Position* pos, const EvalParams* params) {
 
     evaluate_knight_outposts(pos, &counts, params, NULL, WHITE, &mg, &eg, NULL, NULL);
     evaluate_knight_outposts(pos, &counts, params, NULL, BLACK, &mg, &eg, NULL, NULL);
+
+    evaluate_rook_activity(pos, &counts, params, NULL, WHITE, &mg, &eg, NULL, NULL);
+    evaluate_rook_activity(pos, &counts, params, NULL, BLACK, &mg, &eg, NULL, NULL);
+
+    evaluate_king_safety(pos, magic, &counts, params, NULL, WHITE, &mg, &eg, NULL, NULL);
+    evaluate_king_safety(pos, magic, &counts, params, NULL, BLACK, &mg, &eg, NULL, NULL);
 
     evaluate_tropism(pos, &counts, params, NULL, WHITE, &mg, &eg, NULL, NULL);
     evaluate_tropism(pos, &counts, params, NULL, BLACK, &mg, &eg, NULL, NULL);

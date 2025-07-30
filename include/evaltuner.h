@@ -20,6 +20,9 @@ typedef struct {
     int blind_swine_rooks_bonus;
 
     int tropism[6][8];
+    
+    int king_zone_hits_by_type[6];
+    int king_zone_attacker_count;
 } FeatureCounts;
 
 typedef struct {
@@ -29,7 +32,7 @@ typedef struct {
 
 extern const int tropism_feature_idx[6][2];
 
-#define MAX_FEATURES_PER_POSITION 2048
+#define MAX_FEATURES_PER_POSITION 16384
 
 typedef struct {
     double score;
@@ -38,22 +41,14 @@ typedef struct {
 } EvalResult;
 
 int load_dataset(const char* path, TrainingEntry* entries, int max_entries);
-EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* params);
-double find_best_k(const EvalParamsDouble* params, const TrainingEntry* data, int n);
+EvalResult evaluate_with_features(const Position* pos, const EvalParamsDouble* params, const MagicData* magic);
+double find_best_k(const MagicData* magic, const EvalParamsDouble* params, const TrainingEntry* data, int n);
 double sigmoid(double x, double k);
 double sigmoid_derivative(double x, double k);
-double compute_loss(const EvalParamsDouble* params, const TrainingEntry* data, int n, double k);
-void run_minibatch_training(
-    EvalParamsDouble* params,
-    const TrainingEntry* data,
-    int batch_size,
-    double learning_rate,
-    int iterations,
-    double sigmoid_k,
-    const char* output_file
-);
+double compute_loss(const MagicData* magic, const EvalParamsDouble* params, const TrainingEntry* data, int n, double k);
+void run_minibatch_training(const MagicData* magic, EvalParamsDouble* params, const TrainingEntry* data, int batch_size, double learning_rate, int iterations, double sigmoid_k, const char* output_file);
 void convert_params_to_integer(const EvalParamsDouble* in, EvalParams* out);
 void save_evalparams_text(const char* path, const EvalParams* p);
-void run_tuner_main(const char* dataset_path, const char* output_prefix);
+void run_tuner_main(const MagicData* magic, const char* dataset_path, const char* output_prefix);
 
 #endif

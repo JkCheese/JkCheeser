@@ -263,7 +263,7 @@ int get_lmr_reduction(int depth, int move_count, int is_pv, int is_capture, int 
 }
 
 int quiescence(Position* pos, int alpha, int beta, const EvalParams* params, const MagicData* magic, ZobristKeys* keys) {
-    int stand_pat = evaluation(pos, params);
+    int stand_pat = evaluation(pos, params, magic);
 
     if (stand_pat >= beta)
         return beta;  // fail-hard beta cutoff
@@ -374,7 +374,7 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, int is_pv_nod
 
     // Razoring - if we're way behind even after capturing something, drop to qsearch
     if (!is_pv_node && depth <= 3 && !in_check) {
-        int eval = evaluation(pos, params);
+        int eval = evaluation(pos, params, magic);
         if (eval + razor_margin[depth] <= alpha) {
             int razor_score = quiescence(pos, alpha, beta, params, magic, keys);
             if (razor_score <= alpha) {
@@ -386,7 +386,7 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, int is_pv_nod
 
     // Reverse Futility Pruning (Static Null Move Pruning)
     if (!is_pv_node && depth <= 3 && !in_check) {
-        int eval = evaluation(pos, params);
+        int eval = evaluation(pos, params, magic);
         if (eval - reverse_futility_margin[depth] >= beta) {
             repetition_index = old_index;
             return eval; // Fail soft
@@ -407,7 +407,7 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, int is_pv_nod
     // Extended futility pruning setup
     int can_futility_prune = 0;
     if (!is_pv_node && depth <= 3 && !in_check) {
-        stand_pat = evaluation(pos, params);
+        stand_pat = evaluation(pos, params, magic);
         can_futility_prune = 1;
     }
 
@@ -536,8 +536,6 @@ int find_best_move(Position* pos, int max_depth, const EvalParams* params,
 
     int best_move = 0;
     int best_score = -MATE_SCORE;
-    int pv_line[32];
-    int pv_len = 0;
 
     for (int depth = 1; depth <= max_depth; depth++) {
         int current_best_move = 0;
@@ -601,8 +599,6 @@ int find_best_move(Position* pos, int max_depth, const EvalParams* params,
         if (current_best_move != 0) {
             best_move = current_best_move;
             best_score = current_best_score;
-            pv_line[0] = current_best_move;
-            pv_len = 1;
         }
 
         printf("info depth %d score cp %d\n", depth, (pos->side_to_move == WHITE) ? best_score : -best_score);

@@ -15,7 +15,8 @@ static inline int manhattan(int sq1, int sq2) {
 void evaluate_passed_pawns(const Position* pos, FeatureCounts* counts, const EvalParams* params, const EvalParamsDouble* dparams, int side, int* mg, int* eg, double* dmg, double* deg);
 void evaluate_knight_outposts(const Position* pos, FeatureCounts* counts, const EvalParams* params, const EvalParamsDouble* dparams, int side, int* mg, int* eg, double* dmg, double* deg);
 void evaluate_rook_activity(const Position* pos, FeatureCounts* counts, const EvalParams* params, const EvalParamsDouble* dparams, int side, int* mg, int* eg, double* dmg, double* deg);
+void evaluate_king_safety(const Position* pos, const MagicData* magic, FeatureCounts* counts, const EvalParams* params, const EvalParamsDouble* dparams, int side, int* mg, int* eg, double* dmg, double* deg);
 void evaluate_tropism(const Position* pos, FeatureCounts* counts, const EvalParams* params, const EvalParamsDouble* dparams, int side, int* mg, int* eg, double* dmg, double* deg);
-int evaluation(const Position* pos, const EvalParams* params);
+int evaluation(const Position* pos, const EvalParams* params, const MagicData* magic);
 
 #endif

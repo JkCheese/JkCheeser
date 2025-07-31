@@ -436,37 +436,39 @@ int search(Position* pos, int depth, int ply, int alpha, int beta, int is_pv_nod
                           flag == PROMOTE_R_CAPTURE || flag == PROMOTE_Q_CAPTURE);
 
         // Extended Futility Pruning
-        if (!is_pv_node && can_futility_prune && !is_capture &&
-            stand_pat + futility_margin[depth] <= alpha)
-        {
-            continue;
+        if (!is_pv_node && depth >= 2 && depth <= 3 && !in_check && !is_capture) {
+            int margin = futility_margin[depth];  // Make sure this is tuned properly
+            if (stand_pat + margin <= alpha) {
+                // Skip this quiet move
+                continue;
+            }
         }
 
         if (!make_move(pos, &state, move, keys)) continue;
 
         int score;
-        int child_is_pv = is_pv_node && (i == 0);
         int gives_check = is_in_check(pos, pos->side_to_move, magic);
 
-        if (found_pv) {
-            // PVS: Search with null window first
-            score = -search(pos, depth - 1, ply + 1, -alpha - 1, -alpha, 0, params, magic, keys);
-            
-            // If it fails high, do a full re-search
-            if (score > alpha && score < beta) {
-                score = -search(pos, depth - 1, ply + 1, -beta, -alpha, child_is_pv, params, magic, keys);
-            }
-        } else {
-            // First move or not yet found PV: full window search
+        if (i == 0 || !is_pv_node) {
+            // First move or non-PV node → full-window search
             if (depth >= 3 && i >= 3 && !is_capture && !gives_check) {
-                // Enhanced LMR
+                // LMR
                 int reduction = get_lmr_reduction(depth, i, is_pv_node, is_capture, gives_check);
                 score = -search(pos, depth - 1 - reduction, ply + 1, -alpha - 1, -alpha, 0, params, magic, keys);
+
                 if (score > alpha) {
-                    score = -search(pos, depth - 1, ply + 1, -beta, -alpha, child_is_pv, params, magic, keys);
+                    score = -search(pos, depth - 1, ply + 1, -beta, -alpha, 1, params, magic, keys);
                 }
             } else {
-                score = -search(pos, depth - 1, ply + 1, -beta, -alpha, child_is_pv, params, magic, keys);
+                score = -search(pos, depth - 1, ply + 1, -beta, -alpha, 1, params, magic, keys);
+            }
+        } else {
+            // PVS: Try null window first
+            score = -search(pos, depth - 1, ply + 1, -alpha - 1, -alpha, 0, params, magic, keys);
+
+            // Re-search if it fails high
+            if (score > alpha && score < beta) {
+                score = -search(pos, depth - 1, ply + 1, -beta, -alpha, 1, params, magic, keys);
             }
         }
 
@@ -556,7 +558,11 @@ int find_best_move(Position* pos, int max_depth, const EvalParams* params,
         while (research && research_count < 3) {
             research = false;
 
+            // printf("info string Total legal moves: %d\n", list.count);
             for (int i = 0; i < list.count; i++) {
+                // char san[7];
+                // move_to_san(pos, list.moves[i], san, magic, keys);
+                // printf("Move %d: %s\n", i, san);
                 int move = list.moves[i];
 
                 if (depth > 1 && move == best_move) {

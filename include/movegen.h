@@ -59,11 +59,7 @@ static inline int get_piece_on_square(const Position* pos, int sq) {
     Bitboard piece_bb = 1ULL << sq;
     // For every piece bitboard, check if there is a piece on the same square as the previously set bitboard and return the piece if one is found
     for (int piece = 0; piece < 12; piece++) {
-        if (pos->pieces[piece] & piece_bb) {
-            // printf("Piece: %d\n", piece);
-            // print_bitboard(pos->pieces[piece]);
-            return piece;
-        }
+        if (pos->pieces[piece] & piece_bb) return piece;
     }
 
     // Return -1 if no piece is found
@@ -148,10 +144,6 @@ static inline int is_square_attacked(const Position* pos, int sq, int attacking_
 
     /* ---------- Pawn attacks ---------- */
 
-    // printf("Checking if square %d (%s) is attacked by %s\n", 
-    //        sq, (char[3]){('a' + (sq % 8)), ('1' + (sq / 8)), 0}, 
-    //        side == WHITE ? "White" : "Black");
-
     // Initialize the pawn bitboard for the attacking side
     Bitboard pawns = pos->pieces[attacking_side == WHITE ? WP : BP];
     // Initialize a bitboard for all pawn attacks from the given square
@@ -160,10 +152,7 @@ static inline int is_square_attacked(const Position* pos, int sq, int attacking_
         : (((1ULL << sq) & ~FILE_X(0)) << 7) | (((1ULL << sq) & ~FILE_X(7)) << 9);
 
 
-    if (pawns & pawn_attackers) {
-        // printf("[DEBUG] pawn attack detected on square %d\n", sq);
-        return 1;
-    }
+    if (pawns & pawn_attackers) return 1;
 
     /* ---------- Knight attacks ---------- */
 
@@ -172,17 +161,7 @@ static inline int is_square_attacked(const Position* pos, int sq, int attacking_
     // Initialize a bitboard for all knight attacks from the given square
     Bitboard knight_moves = knight_attacks(sq);
     // If at least one knight on the bitboard intersects with at least one of the possible knight moves from the square, return true
-    if (knights & knight_moves) {
-        // printf("[DEBUG] knight attack detected on square %d\n", sq);
-        // printf("  Knight attack detected on square %d\n", sq);
-        // for (int i = 0; i < 64; i++) {
-        //     if (knights & (1ULL << i)) {
-        //         printf("    Knight on %d (%s) attacks %d\n", 
-        //                i, (char[3]){('a' + (i % 8)), ('1' + (i / 8)), 0}, sq);
-        //     }
-        // }
-        return 1;
-    }
+    if (knights & knight_moves) return 1;
 
     /* ---------- Bishop/Queen diagonal attacks ---------- */
     
@@ -191,17 +170,7 @@ static inline int is_square_attacked(const Position* pos, int sq, int attacking_
     // Initialize a bitboard for all bishop-like attacks from the given square
     Bitboard bishop_moves = bishop_attacks(sq, pos->occupied[ALL], magic);
     // If at least one bishop or queen on the bitboard intersects with at least one of the possible bishop moves from the square, return true
-    if (bishops_queens & bishop_moves) {
-        // printf("[DEBUG] bishop/queen attack detected on square %d\n", sq);
-        // printf("  Bishop/Queen attack detected on square %d\n", sq);
-        // for (int i = 0; i < 64; i++) {
-        //     if (bishops_queens & (1ULL << i)) {
-        //         printf("    Bishop/Queen on %d (%s) attacks %d\n", 
-        //                i, (char[3]){('a' + (i % 8)), ('1' + (i / 8)), 0}, sq);
-        //     }
-        // }
-        return 1;
-    }
+    if (bishops_queens & bishop_moves) return 1;
 
     /* ---------- Rook/Queen horizontal attacks ---------- */
 
@@ -210,17 +179,7 @@ static inline int is_square_attacked(const Position* pos, int sq, int attacking_
     // Initialize a bitboard for all rook-like attacks from the given square
     Bitboard rook_moves = rook_attacks(sq, pos->occupied[ALL], magic);
     // If at least one rook or queen on the bitboard intersects with at least one of the possible rook moves from the square, return true
-    if (rooks_queens & rook_moves) {
-        // printf("[DEBUG] rook/queen attack detected on square %d\n", sq);
-        // printf("  Rook/Queen attack detected on square %d\n", sq);
-        // for (int i = 0; i < 64; i++) {
-        //     if (rooks_queens & (1ULL << i)) {
-        //         printf("    Rook/Queen on %d (%s) attacks %d\n", 
-        //                i, (char[3]){('a' + (i % 8)), ('1' + (i / 8)), 0}, sq);
-        //     }
-        // }
-        return 1;
-    }
+    if (rooks_queens & rook_moves) return 1;
 
     /* ---------- King attacks ---------- */
 
@@ -229,13 +188,7 @@ static inline int is_square_attacked(const Position* pos, int sq, int attacking_
     // Initialize a bitboard for all king attacks from the given square
     Bitboard king_moves = king_attacks(sq);
     // If the king's square on its bitboard intersects with at least one of the possible king moves from the square, return true
-    if (kings & king_moves) {
-        // printf("[DEBUG] king attack detected on square %d\n", sq);
-        // printf("  King attack detected on square %d\n", sq);
-        return 1;
-    }
-
-    // printf("  No attacks detected on square %d\n", sq);
+    if (kings & king_moves) return 1;
 
     // Return false if no attacks were detected
     return 0;
@@ -734,13 +687,8 @@ static inline int is_legal_move(const Position* pos, int move, const MagicData* 
         return 0; // illegal move due to malformed input
     }
 
-    // printf("[DEBUG] After move %d:\n", move);
-    // print_position(&temp);
-
     // After move, is king in check? make_move() only switches the side to move in the temp position, so we don't have to switch back
     int in_check = is_in_check(&temp, temp.side_to_move ^ 1, magic);
-    // move_to_string(move);
-    // printf("Still in check? %d\n", in_check);
 
     return !in_check;
 }
